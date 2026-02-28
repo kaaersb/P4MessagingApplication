@@ -5,299 +5,46 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Register — Messenger</title>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
-    <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        :root {
-            --bg: #0a0a0a;
-            --surface: #111111;
-            --border: #222222;
-            --accent: #e8ff47;
-            --accent-dim: #b8cc30;
-            --text: #f0f0f0;
-            --muted: #666666;
-            --error: #ff4757;
-        }
-
-        body {
-            background: var(--bg);
-            color: var(--text);
-            font-family: 'DM Mono', monospace;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-
-        /* Background grid */
-        body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background-image:
-                linear-gradient(rgba(232,255,71,0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(232,255,71,0.03) 1px, transparent 1px);
-            background-size: 40px 40px;
-            pointer-events: none;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 440px;
-            padding: 20px;
-            animation: fadeUp 0.6s ease both;
-        }
-
-        @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(24px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .logo {
-            font-family: 'Syne', sans-serif;
-            font-weight: 800;
-            font-size: 1.1rem;
-            letter-spacing: 0.15em;
-            text-transform: uppercase;
-            color: var(--accent);
-            margin-bottom: 48px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .logo-dot {
-            width: 8px;
-            height: 8px;
-            background: var(--accent);
-            border-radius: 50%;
-            animation: pulse 2s ease infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.4; transform: scale(0.6); }
-        }
-
-        h1 {
-            font-family: 'Syne', sans-serif;
-            font-weight: 800;
-            font-size: 2.4rem;
-            line-height: 1.1;
-            margin-bottom: 8px;
-            letter-spacing: -0.02em;
-        }
-
-        .subtitle {
-            color: var(--muted);
-            font-size: 0.85rem;
-            margin-bottom: 40px;
-        }
-
-        .field {
-            margin-bottom: 20px;
-            animation: fadeUp 0.6s ease both;
-        }
-
-        .field:nth-child(1) { animation-delay: 0.1s; }
-        .field:nth-child(2) { animation-delay: 0.2s; }
-        .field:nth-child(3) { animation-delay: 0.3s; }
-
-        label {
-            display: block;
-            font-size: 0.7rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: var(--muted);
-            margin-bottom: 8px;
-        }
-
-        input {
-            width: 100%;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            color: var(--text);
-            font-family: 'DM Mono', monospace;
-            font-size: 0.95rem;
-            padding: 14px 16px;
-            outline: none;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-
-        input:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(232,255,71,0.08);
-        }
-
-        input::placeholder { color: var(--muted); }
-
-        button {
-            width: 100%;
-            background: var(--accent);
-            color: #0a0a0a;
-            border: none;
-            font-family: 'Syne', sans-serif;
-            font-weight: 700;
-            font-size: 0.9rem;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            padding: 16px;
-            cursor: pointer;
-            margin-top: 8px;
-            transition: background 0.2s, transform 0.1s;
-            animation: fadeUp 0.6s 0.4s ease both;
-        }
-
-        button:hover { background: var(--accent-dim); }
-        button:active { transform: scale(0.98); }
-
-        button:disabled {
-            background: var(--border);
-            color: var(--muted);
-            cursor: not-allowed;
-        }
-
-        .message {
-            margin-top: 16px;
-            padding: 12px 16px;
-            font-size: 0.82rem;
-            border-left: 3px solid transparent;
-            animation: fadeUp 0.3s ease both;
-            display: none;
-        }
-
-        .message.success {
-            border-color: var(--accent);
-            background: rgba(232,255,71,0.06);
-            color: var(--accent);
-            display: block;
-        }
-
-        .message.error {
-            border-color: var(--error);
-            background: rgba(255,71,87,0.06);
-            color: var(--error);
-            display: block;
-        }
-
-        .footer-link {
-            margin-top: 32px;
-            font-size: 0.8rem;
-            color: var(--muted);
-            text-align: center;
-            animation: fadeUp 0.6s 0.5s ease both;
-        }
-
-        .footer-link a {
-            color: var(--accent);
-            text-decoration: none;
-            border-bottom: 1px solid transparent;
-            transition: border-color 0.2s;
-        }
-
-        .footer-link a:hover { border-color: var(--accent); }
-
-        .corner-decoration {
-            position: fixed;
-            bottom: 40px;
-            right: 40px;
-            font-size: 0.7rem;
-            color: var(--border);
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/auth.css">
 </head>
 <body>
 
-<div class="container">
-    <div class="logo">
-        <div class="logo-dot"></div>
-        Messenger
+    <div class="container">
+        <a class="logo" href="/">
+            <div class="logo-dot"></div>
+            Messenger
+        </a>
+
+        <h1>Create<br>Account</h1>
+        <p class="subtitle">Join the network. Start messaging.</p>
+
+        <div class="field">
+            <label>Username</label>
+            <input type="text" id="username" placeholder="e.g. kaare_dev" autocomplete="off" />
+        </div>
+
+        <div class="field">
+            <label>Email</label>
+            <input type="email" id="email" placeholder="you@example.com" autocomplete="off" />
+        </div>
+
+        <div class="field">
+            <label>Password</label>
+            <input type="password" id="password" placeholder="Choose a password" />
+        </div>
+
+        <button class="submit-btn" id="register-btn" onclick="register()">Create Account →</button>
+
+        <div class="message" id="message"></div>
+
+        <div class="footer-link">
+            Already have an account? <a href="/login.html">Sign in</a>
+        </div>
     </div>
 
-    <h1>Create<br>Account</h1>
-    <p class="subtitle">Join the network. Start messaging.</p>
+    <div class="corner-decoration">v0.1 — dev build</div>
 
-    <div class="field">
-        <label>Username</label>
-        <input type="text" id="username" placeholder="e.g. kaare_dev" autocomplete="off" />
-    </div>
-
-    <div class="field">
-        <label>Email</label>
-        <input type="email" id="email" placeholder="you@example.com" autocomplete="off" />
-    </div>
-
-    <div class="field">
-        <label>Password</label>
-        <input type="password" id="password" placeholder="Choose a password" />
-    </div>
-
-    <button id="register-btn" onclick="register()">Create Account →</button>
-
-    <div class="message" id="message"></div>
-
-    <div class="footer-link">
-        Already have an account? <a href="login.html">Sign in</a>
-    </div>
-</div>
-
-<div class="corner-decoration">v0.1 — dev build</div>
-
-<script>
-    const BASE = "http://127.0.0.1:8000";
-
-    async function register() {
-        const username = document.getElementById("username").value.trim();
-        const email = document.getElementById("email").value.trim();
-        const password = document.getElementById("password").value;
-        const btn = document.getElementById("register-btn");
-        const msg = document.getElementById("message");
-
-        if (!username || !email || !password) {
-            showMessage("All fields are required.", "error");
-            return;
-        }
-
-        btn.disabled = true;
-        btn.textContent = "Creating account...";
-
-        try {
-            const res = await fetch(`${BASE}/register`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username, email, password })
-            });
-
-            const data = await res.json();
-
-            if (res.ok) {
-                showMessage(`Account created! Welcome, ${username}. Redirecting to login...`, "success");
-                setTimeout(() => window.location.href = "login.html", 2000);
-            } else {
-                showMessage(data.detail || "Registration failed.", "error");
-                btn.disabled = false;
-                btn.textContent = "Create Account →";
-            }
-        } catch (e) {
-            showMessage("Could not connect to server.", "error");
-            btn.disabled = false;
-            btn.textContent = "Create Account →";
-        }
-    }
-
-    function showMessage(text, type) {
-        const msg = document.getElementById("message");
-        msg.textContent = text;
-        msg.className = `message ${type}`;
-    }
-
-    document.addEventListener("keydown", e => {
-        if (e.key === "Enter") register();
-    });
-</script>
-
+    <script src="/static/js/register.js"></script>
 </body>
 </html>
