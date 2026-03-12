@@ -4,14 +4,19 @@ import os
 
 load_dotenv()
 
+DATABASE_URL = os.getenv("DATABASE_URL")
+
 try:
-    conn = psycopg2.connect(os.getenv("DATABASE_URL"))
-    cursor = conn.cursor()
-    cursor.execute("SELECT version();")
+    connection = psycopg2.connect(DATABASE_URL)
+    print("Connection successful!")
+
+    cursor = connection.cursor()
+    cursor.execute("SELECT NOW();")
     result = cursor.fetchone()
-    print("✅ Connection successful!")
-    print(f"PostgreSQL version: {result[0]}")
+    print("Current Time:", result)
+
     cursor.close()
-    conn.close()
+    connection.close()
+    print("Connection closed.")
 except Exception as e:
-    print(f"❌ Connection failed: {e}")
+    print(f"Failed to connect: {e}")
