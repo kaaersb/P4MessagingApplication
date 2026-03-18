@@ -1,83 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Relay — Login</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles/main.css" />
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Relay — Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com"/>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap"
+          rel="stylesheet"/>
+    <link rel="stylesheet" href="/static/css/auth.css">     <!-- login/register pages -->
 </head>
 <body>
 
 <div class="auth-wrap">
-  <div class="auth-card">
-    <div class="auth-brand">
-      <a href="/" class="auth-brand-link">
-        <span class="brand-mark">▶</span>
-        <span class="brand-name">relay</span>
-      </a>
+    <div class="auth-card">
+        <div class="auth-brand">
+            <a href="/" class="auth-brand-link">
+                <span class="brand-mark">▶</span>
+                <span class="brand-name">relay</span>
+            </a>
+        </div>
+
+        <h2 class="auth-title">Welcome back</h2>
+        <p class="auth-subtitle">// sign in to continue</p>
+
+        <div class="form-group">
+            <label class="form-label" for="username">Username</label>
+            <input class="form-input" type="text" id="username" placeholder="your_username" autocomplete="username"/>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="password">Password</label>
+            <input class="form-input" type="password" id="password" placeholder="••••••••"
+                   autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()"/>
+        </div>
+
+        <div id="error-msg" class="form-error hidden"></div>
+
+        <button class="btn btn-primary btn-full" id="login-btn" onclick="doLogin()">Login</button>
+
+        <p class="auth-switch">No account? <a href="/register.html">Register</a></p>
     </div>
-
-    <h2 class="auth-title">Welcome back</h2>
-    <p class="auth-subtitle">// sign in to continue</p>
-
-    <div class="form-group">
-      <label class="form-label" for="username">Username</label>
-      <input class="form-input" type="text" id="username" placeholder="your_username" autocomplete="username" />
-    </div>
-
-    <div class="form-group">
-      <label class="form-label" for="password">Password</label>
-      <input class="form-input" type="password" id="password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()" />
-    </div>
-
-    <div id="error-msg" class="form-error hidden"></div>
-
-    <button class="btn btn-primary btn-full" id="login-btn" onclick="doLogin()">Login</button>
-
-    <p class="auth-switch">No account? <a href="/register.html">Register</a></p>
-  </div>
 </div>
 
 <script src="/js/api.js"></script>
 <script>
-  // Redirect if already logged in
-  if (localStorage.getItem('relay_user')) {
-    window.location.href = '/';
-  }
-
-  async function doLogin() {
-    const username = document.getElementById('username').value.trim();
-    const password = document.getElementById('password').value;
-    const errorEl = document.getElementById('error-msg');
-    const btn = document.getElementById('login-btn');
-
-    errorEl.classList.add('hidden');
-    if (!username || !password) {
-      showError('Please fill in all fields.');
-      return;
+    // Redirect if already logged in
+    if (localStorage.getItem('relay_user')) {
+        window.location.href = '/';
     }
 
-    btn.disabled = true;
-    btn.textContent = 'Logging in...';
+    async function doLogin() {
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+        const errorEl = document.getElementById('error-msg');
+        const btn = document.getElementById('login-btn');
 
-    try {
-      const data = await api.post('/login', { username, password });
-      localStorage.setItem('relay_user', JSON.stringify({ id: data.user_id, username: data.username }));
-      window.location.href = '/';
-    } catch (err) {
-      showError(err.message || 'Login failed.');
-      btn.disabled = false;
-      btn.textContent = 'Login';
+        errorEl.classList.add('hidden');
+        if (!username || !password) {
+            showError('Please fill in all fields.');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Logging in...';
+
+        try {
+            const data = await api.post('/login', {username, password});
+            localStorage.setItem('relay_user', JSON.stringify({id: data.user_id, username: data.username}));
+            window.location.href = '/';
+        } catch (err) {
+            showError(err.message || 'Login failed.');
+            btn.disabled = false;
+            btn.textContent = 'Login';
+        }
     }
-  }
 
-  function showError(msg) {
-    const el = document.getElementById('error-msg');
-    el.textContent = msg;
-    el.classList.remove('hidden');
-  }
+    function showError(msg) {
+        const el = document.getElementById('error-msg');
+        el.textContent = msg;
+        el.classList.remove('hidden');
+    }
 </script>
 </body>
 </html>
