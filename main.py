@@ -50,12 +50,11 @@ class FriendRequest(BaseModel):
 class FriendRequestResponse(BaseModel):
     request_id: int
     action: str         # "accept" or "decline"
+    user_id: int        # FIX: added so we can verify the responder is actually the receiver
 
 class BlockRequest(BaseModel):
     blocker_id: int
     blocked_id: int
-
-
 
 
 # ==============================
@@ -112,7 +111,6 @@ def get_users():
     conn = get_db()
     cursor = conn.cursor()
     try:
-        # FIX: was selecting password column but mapping it to email
         cursor.execute("SELECT id, username, email FROM users")
         rows = cursor.fetchall()
         users = [{"id": row[0], "username": row[1], "email": row[2]} for row in rows]
@@ -192,6 +190,31 @@ def send_message(data: MessageRequest):
         conn.close()
 
 
+# FIX: /messages/unread/{user_id} MUST be registered before /messages/{user_id}/{other_user_id}
+# otherwise FastAPI matches "unread" as the user_id integer param and this route is never reached.
+
+@app.get("/messages/unread/{user_id}")
+def get_unread_count(user_id: int):
+    """Get the number of unread messages per sender for a user."""
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """SELECT sender_id, COUNT(*) as unread_count
+               FROM messages
+               WHERE recipient_id = %s AND is_read = FALSE
+               GROUP BY sender_id""",
+            (user_id,)
+        )
+        rows = cursor.fetchall()
+        unread = [{"sender_id": row[0], "unread_count": row[1]} for row in rows]
+        total = sum(r["unread_count"] for r in unread)
+        return {"unread_by_sender": unread, "total_unread": total}
+    finally:
+        cursor.close()
+        conn.close()
+
+
 @app.get("/messages/{user_id}/{other_user_id}")
 def get_messages(user_id: int, other_user_id: int):
     """Get the full conversation between two users. Also marks received messages as read."""
@@ -227,28 +250,9 @@ def get_messages(user_id: int, other_user_id: int):
             for row in rows
         ]
         return {"messages": messages}
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@app.get("/messages/unread/{user_id}")
-def get_unread_count(user_id: int):
-    """Get the number of unread messages per sender for a user."""
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            """SELECT sender_id, COUNT(*) as unread_count
-               FROM messages
-               WHERE recipient_id = %s AND is_read = FALSE
-               GROUP BY sender_id""",
-            (user_id,)
-        )
-        rows = cursor.fetchall()
-        unread = [{"sender_id": row[0], "unread_count": row[1]} for row in rows]
-        total = sum(r["unread_count"] for r in unread)
-        return {"unread_by_sender": unread, "total_unread": total}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
     finally:
         cursor.close()
         conn.close()
@@ -348,6 +352,14 @@ def respond_to_friend_request(data: FriendRequestResponse):
     conn = get_db()
     cursor = conn.cursor()
     try:
+        # FIX: verify the user responding is actually the receiver of the request
+        cursor.execute(
+            "SELECT id FROM friendships WHERE id = %s AND receiver_id = %s",
+            (data.request_id, data.user_id)
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=403, detail="You can only respond to your own friend requests")
+
         if data.action == "accept":
             cursor.execute(
                 "UPDATE friendships SET status = 'accepted' WHERE id = %s",

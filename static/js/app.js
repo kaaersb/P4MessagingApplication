@@ -347,7 +347,7 @@ async function loadRequests() {
 
 async function respondRequest(requestId, action) {
   try {
-    await api.post('/friend-request/respond', { request_id: requestId, action });
+    await api.post('/friend-request/respond', { request_id: requestId, action, user_id: currentUser.id });
     showToast(action === 'accept' ? 'Friend request accepted!' : 'Request declined.');
     loadRequests();
     if (action === 'accept') loadFriendsForChat();
