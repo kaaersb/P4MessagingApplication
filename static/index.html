@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Relay — Messaging</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles/main.css" />
+</head>
+<body>
+
+<!-- ===================== LOGGED-OUT VIEW ===================== -->
+<div id="view-guest" class="view hidden">
+  <div class="guest-wrap">
+    <div class="guest-brand">
+      <span class="brand-mark">▶</span>
+      <h1 class="brand-name">relay</h1>
+    </div>
+    <p class="guest-tagline">Direct messages. No noise.</p>
+    <div class="guest-actions">
+      <a href="/login.html" class="btn btn-primary">Login</a>
+      <a href="/register.html" class="btn btn-ghost">Register</a>
+    </div>
+    <p class="guest-hint">// connect with people you actually want to talk to</p>
+  </div>
+</div>
+
+<!-- ===================== LOGGED-IN VIEW ===================== -->
+<div id="view-app" class="view hidden">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <span class="brand-mark-sm">▶</span>
+      <span class="brand-name-sm">relay</span>
+    </div>
+
+    <div class="user-badge" id="user-badge">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <div class="user-info">
+        <span class="user-name" id="sidebar-username">...</span>
+        <span class="user-status">● online</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-panel="chats" onclick="showPanel('chats')">
+        <span class="nav-icon">💬</span> Chats
+        <span class="unread-badge hidden" id="total-unread-badge">0</span>
+      </button>
+      <button class="nav-item" data-panel="friends" onclick="showPanel('friends')">
+        <span class="nav-icon">👥</span> Friends
+      </button>
+      <button class="nav-item" data-panel="requests" onclick="showPanel('requests')">
+        <span class="nav-icon">📨</span> Requests
+        <span class="unread-badge hidden" id="requests-badge">0</span>
+      </button>
+      <button class="nav-item" data-panel="search" onclick="showPanel('search')">
+        <span class="nav-icon">🔍</span> Find People
+      </button>
+      <button class="nav-item" data-panel="blocked" onclick="showPanel('blocked')">
+        <span class="nav-icon">🚫</span> Blocked
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="btn-logout" onclick="logout()">Logout →</button>
+    </div>
+  </aside>
+
+  <!-- Main content area -->
+  <main class="main-area">
+
+    <!-- ---- CHATS PANEL ---- -->
+    <div class="panel active" id="panel-chats">
+      <div class="panel-header">
+        <h2>Chats</h2>
+      </div>
+      <div class="chat-layout">
+        <div class="chat-list" id="chat-list">
+          <p class="empty-state">No conversations yet.<br/>Add some friends to get started.</p>
+        </div>
+        <div class="chat-window" id="chat-window">
+          <div class="chat-window-empty" id="chat-empty-state">
+            <span class="chat-empty-icon">💬</span>
+            <p>Select a conversation</p>
+          </div>
+          <div class="chat-active hidden" id="chat-active">
+            <div class="chat-header" id="chat-header">
+              <span id="chat-with-name">—</span>
+            </div>
+            <div class="messages-area" id="messages-area"></div>
+            <div class="message-input-row">
+              <input type="text" id="msg-input" placeholder="Type a message..." onkeydown="if(event.key==='Enter') sendMessage()" />
+              <button class="btn-send" onclick="sendMessage()">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- FRIENDS PANEL ---- -->
+    <div class="panel hidden" id="panel-friends">
+      <div class="panel-header">
+        <h2>Friends</h2>
+      </div>
+      <div id="friends-list" class="card-list">
+        <p class="empty-state">Loading...</p>
+      </div>
+    </div>
+
+    <!-- ---- REQUESTS PANEL ---- -->
+    <div class="panel hidden" id="panel-requests">
+      <div class="panel-header">
+        <h2>Friend Requests</h2>
+      </div>
+      <div id="requests-list" class="card-list">
+        <p class="empty-state">No pending requests.</p>
+      </div>
+    </div>
+
+    <!-- ---- SEARCH PANEL ---- -->
+    <div class="panel hidden" id="panel-search">
+      <div class="panel-header">
+        <h2>Find People</h2>
+      </div>
+      <div class="search-bar">
+        <input type="text" id="search-input" placeholder="Search by username..." oninput="debounceSearch()" />
+      </div>
+      <div id="search-results" class="card-list"></div>
+    </div>
+
+    <!-- ---- BLOCKED PANEL ---- -->
+    <div class="panel hidden" id="panel-blocked">
+      <div class="panel-header">
+        <h2>Blocked Users</h2>
+      </div>
+      <div id="blocked-list" class="card-list">
+        <p class="empty-state">No blocked users.</p>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Toast notification -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="/js/api.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>

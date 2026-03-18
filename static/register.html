@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Relay — Register</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles/main.css" />
+</head>
+<body>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <a href="/" class="auth-brand-link">
+        <span class="brand-mark">▶</span>
+        <span class="brand-name">relay</span>
+      </a>
+    </div>
+
+    <h2 class="auth-title">Create account</h2>
+    <p class="auth-subtitle">// join relay today</p>
+
+    <div class="form-group">
+      <label class="form-label" for="username">Username</label>
+      <input class="form-input" type="text" id="username" placeholder="choose_a_username" autocomplete="username" />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="email">Email</label>
+      <input class="form-input" type="email" id="email" placeholder="you@example.com" autocomplete="email" />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="password">Password</label>
+      <input class="form-input" type="password" id="password" placeholder="••••••••" autocomplete="new-password" onkeydown="if(event.key==='Enter') doRegister()" />
+    </div>
+
+    <div id="error-msg" class="form-error hidden"></div>
+    <div id="success-msg" class="form-success hidden"></div>
+
+    <button class="btn btn-primary btn-full" id="register-btn" onclick="doRegister()">Create Account</button>
+
+    <p class="auth-switch">Already have an account? <a href="/login.html">Login</a></p>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  // Redirect if already logged in
+  if (localStorage.getItem('relay_user')) {
+    window.location.href = '/';
+  }
+
+  async function doRegister() {
+    const username = document.getElementById('username').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const errorEl = document.getElementById('error-msg');
+    const successEl = document.getElementById('success-msg');
+    const btn = document.getElementById('register-btn');
+
+    errorEl.classList.add('hidden');
+    successEl.classList.add('hidden');
+
+    if (!username || !email || !password) {
+      showError('Please fill in all fields.');
+      return;
+    }
+    if (password.length < 6) {
+      showError('Password must be at least 6 characters.');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Creating account...';
+
+    try {
+      await api.post('/register', { username, email, password });
+      successEl.textContent = 'Account created! Redirecting to login...';
+      successEl.classList.remove('hidden');
+      setTimeout(() => window.location.href = '/login.html', 1500);
+    } catch (err) {
+      showError(err.message || 'Registration failed.');
+      btn.disabled = false;
+      btn.textContent = 'Create Account';
+    }
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('error-msg');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  }
+</script>
+</body>
+</html>
