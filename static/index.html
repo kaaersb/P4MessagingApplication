@@ -2,154 +2,403 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Relay — Messaging</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com"/>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap"
-          rel="stylesheet"/>
-    <link rel="stylesheet" href="/styles/messenger.css"> <!-- chat page -->
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Aura — Messaging</title>
+    <meta content="A refined, modern messaging experience." name="description"/>
+    <link href="/styles/base.css" rel="stylesheet"/>
+    <link href="/styles/auth.css" rel="stylesheet"/>
+    <link href="/styles/app.css" rel="stylesheet"/>
+    <script src="/js/app.js"></script>
 </head>
 <body>
 
-<!-- ===================== LOGGED-OUT VIEW ===================== -->
-<div id="view-guest" class="view hidden">
-    <div class="guest-wrap">
-        <div class="guest-brand">
-            <span class="brand-mark">▶</span>
-            <h1 class="brand-name">relay</h1>
+<!-- ─── Toast Container ──────────────────────────────── -->
+<div aria-live="polite" id="toast-container"></div>
+
+<!-- ─── Sidebar Overlay (mobile) ─────────────────────── -->
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║              AUTH SCREEN (Guest State)           ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<div id="auth-screen">
+    <!-- Ambient background -->
+    <div class="auth-bg">
+        <div class="auth-bg-grid"></div>
+        <div class="auth-orb auth-orb-1"></div>
+        <div class="auth-orb auth-orb-2"></div>
+        <div class="auth-orb auth-orb-3"></div>
+    </div>
+
+    <!-- Welcome View -->
+    <div id="welcome-view">
+        <div class="welcome-logo">
+            <div class="welcome-logo-icon">✦</div>
+            <span class="welcome-logo-name">Aura</span>
         </div>
-        <p class="guest-tagline">Direct messages. No noise.</p>
-        <div class="guest-actions">
-            <a href="/login.html" class="btn btn-primary">Login</a>
-            <a href="/register.html" class="btn btn-ghost">Register</a>
+        <h1 class="welcome-headline">
+            Where conversations<br/><em>come alive</em>
+        </h1>
+        <p class="welcome-sub">
+            A refined messaging space built for clarity and connection.
+            Elegant, private, and always at your fingertips.
+        </p>
+        <div class="welcome-actions">
+            <button class="btn btn-primary" onclick="showView('login')">
+                <svg fill="none" height="16" stroke="currentColor" stroke-width="2"
+                     viewBox="0 0 24 24" width="16" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                    <polyline points="10 17 15 12 10 7"/>
+                    <line x1="15" x2="3" y1="12" y2="12"/>
+                </svg>
+                Sign In
+            </button>
+            <button class="btn btn-ghost" onclick="showView('register')">
+                Create Account
+            </button>
         </div>
-        <p class="guest-hint">// connect with people you actually want to talk to</p>
+        <div class="welcome-features">
+            <div class="feature-chip">
+                <div class="feature-chip-dot"></div>
+                End-to-End Encrypted
+            </div>
+            <div class="feature-chip">
+                <div class="feature-chip-dot"></div>
+                Real-Time Messaging
+            </div>
+            <div class="feature-chip">
+                <div class="feature-chip-dot"></div>
+                Friend Requests
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Panel -->
+    <div class="auth-panel hidden" id="login-view">
+        <a class="auth-panel-back" href="#" onclick="showView('welcome'); return false;">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+                 xmlns="http://www.w3.org/2000/svg">
+                <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            Back
+        </a>
+        <div class="auth-panel-header">
+            <h2 class="auth-panel-title">Welcome back</h2>
+            <p class="auth-panel-subtitle">Sign in to continue your conversations</p>
+        </div>
+        <form class="auth-form" id="login-form" onsubmit="handleLogin(event)">
+            <div class="form-group" id="lg-username-group">
+                <label class="form-label" for="lg-username">Username</label>
+                <div class="input-with-icon">
+                    <svg class="input-icon" fill="none" stroke="currentColor" stroke-width="2"
+                         viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    <input autocomplete="username" class="input-field" id="lg-username" placeholder="your_username"
+                           required type="text"/>
+                </div>
+                <span class="form-error" id="lg-username-error"></span>
+            </div>
+            <div class="form-group" id="lg-password-group">
+                <label class="form-label" for="lg-password">Password</label>
+                <div class="input-with-icon">
+                    <svg class="input-icon" fill="none" stroke="currentColor" stroke-width="2"
+                         viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <rect height="11" rx="2" ry="2" width="18" x="3" y="11"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    <input autocomplete="current-password" class="input-field" id="lg-password" placeholder="••••••••"
+                           required type="password"/>
+                </div>
+                <span class="form-error" id="lg-password-error"></span>
+            </div>
+            <div class="auth-form-footer">
+                <button class="btn btn-primary" id="login-btn" type="submit">
+                    <span id="login-btn-text">Sign In</span>
+                    <span class="spinner hidden" id="login-btn-spinner"></span>
+                </button>
+                <div class="auth-separator">or</div>
+                <p class="auth-switch">
+                    Don't have an account? <a href="#" onclick="showView('register'); return false;">Create one</a>
+                </p>
+            </div>
+        </form>
+    </div>
+
+    <!-- Register Panel -->
+    <div class="auth-panel hidden" id="register-view">
+        <a class="auth-panel-back" href="#" onclick="showView('welcome'); return false;">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+                 xmlns="http://www.w3.org/2000/svg">
+                <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            Back
+        </a>
+        <div class="auth-panel-header">
+            <h2 class="auth-panel-title">Create account</h2>
+            <p class="auth-panel-subtitle">Join Aura and start connecting</p>
+        </div>
+        <form class="auth-form" id="register-form" onsubmit="handleRegister(event)">
+            <div class="form-group" id="rg-username-group">
+                <label class="form-label" for="rg-username">Username</label>
+                <div class="input-with-icon">
+                    <svg class="input-icon" fill="none" stroke="currentColor" stroke-width="2"
+                         viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    <input autocomplete="username" class="input-field" id="rg-username" placeholder="choose_username"
+                           required type="text"/>
+                </div>
+                <span class="form-error" id="rg-username-error"></span>
+            </div>
+            <div class="form-group" id="rg-email-group">
+                <label class="form-label" for="rg-email">Email Address</label>
+                <div class="input-with-icon">
+                    <svg class="input-icon" fill="none" stroke="currentColor" stroke-width="2"
+                         viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                        <polyline points="22,6 12,13 2,6"/>
+                    </svg>
+                    <input autocomplete="email" class="input-field" id="rg-email" placeholder="you@example.com"
+                           required type="email"/>
+                </div>
+                <span class="form-error" id="rg-email-error"></span>
+            </div>
+            <div class="form-group" id="rg-password-group">
+                <label class="form-label" for="rg-password">Password</label>
+                <div class="input-with-icon">
+                    <svg class="input-icon" fill="none" stroke="currentColor" stroke-width="2"
+                         viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <rect height="11" rx="2" ry="2" width="18" x="3" y="11"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    <input autocomplete="new-password" class="input-field" id="rg-password" placeholder="Create a strong password"
+                           required type="password"/>
+                </div>
+                <span class="form-error" id="rg-password-error"></span>
+            </div>
+            <div class="auth-form-footer">
+                <button class="btn btn-primary" id="register-btn" type="submit">
+                    <span id="register-btn-text">Create Account</span>
+                    <span class="spinner hidden" id="register-btn-spinner"></span>
+                </button>
+                <div class="auth-separator">or</div>
+                <p class="auth-switch">
+                    Already have an account? <a href="#" onclick="showView('login'); return false;">Sign in</a>
+                </p>
+            </div>
+        </form>
     </div>
 </div>
 
-<!-- ===================== LOGGED-IN VIEW ===================== -->
-<div id="view-app" class="view hidden">
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║           APP SCREEN (Authenticated State)       ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<div class="hidden" id="app-screen">
+
+    <!-- Nav Rail (desktop) -->
+    <nav aria-label="Main navigation" class="nav-rail">
+        <div class="nav-logo">✦</div>
+
+        <button class="nav-btn active" id="nav-messages-btn" title="Messages">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+                 xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span class="nav-badge hidden" id="nav-unread-badge">0</span>
+        </button>
+
+        <button class="nav-btn" onclick="openAddFriendModal()" title="Add Friend">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+                 xmlns="http://www.w3.org/2000/svg">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <line x1="19" x2="19" y1="8" y2="14"/>
+                <line x1="22" x2="16" y1="11" y2="11"/>
+            </svg>
+        </button>
+
+        <div class="nav-spacer"></div>
+
+        <div class="nav-user-avatar" id="nav-user-avatar" title="Your profile"></div>
+
+        <button class="nav-btn" onclick="handleLogout()" title="Sign out">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+                 xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" x2="9" y1="12" y2="12"/>
+            </svg>
+        </button>
+    </nav>
 
     <!-- Sidebar -->
-    <aside class="sidebar" id="sidebar">
+    <aside aria-label="Conversations" class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <span class="brand-mark-sm">▶</span>
-            <span class="brand-name-sm">relay</span>
-        </div>
-
-        <div class="user-badge" id="user-badge">
-            <div class="user-avatar" id="user-avatar">?</div>
-            <div class="user-info">
-                <span class="user-name" id="sidebar-username">...</span>
-                <span class="user-status">● online</span>
+            <div class="sidebar-title">Messages</div>
+            <div class="search-wrap">
+                <svg class="search-icon" fill="none" stroke="currentColor" stroke-width="2"
+                     viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" x2="16.65" y1="21" y2="16.65"/>
+                </svg>
+                <input class="input-field" id="contact-search" oninput="handleContactSearch(this.value)" placeholder="Search friends…"
+                       type="search"/>
             </div>
         </div>
 
-        <nav class="sidebar-nav">
-            <button class="nav-item active" data-panel="chats" onclick="showPanel('chats')">
-                <span class="nav-icon">💬</span> Chats
-                <span class="unread-badge hidden" id="total-unread-badge">0</span>
-            </button>
-            <button class="nav-item" data-panel="friends" onclick="showPanel('friends')">
-                <span class="nav-icon">👥</span> Friends
-            </button>
-            <button class="nav-item" data-panel="requests" onclick="showPanel('requests')">
-                <span class="nav-icon">📨</span> Requests
-                <span class="unread-badge hidden" id="requests-badge">0</span>
-            </button>
-            <button class="nav-item" data-panel="search" onclick="showPanel('search')">
-                <span class="nav-icon">🔍</span> Find People
-            </button>
-            <button class="nav-item" data-panel="blocked" onclick="showPanel('blocked')">
-                <span class="nav-icon">🚫</span> Blocked
-            </button>
-        </nav>
-
-        <div class="sidebar-footer">
-            <button class="btn-logout" onclick="logout()">Logout →</button>
+        <!-- Tabs -->
+        <div class="sidebar-tabs">
+            <button class="tab-btn active" id="tab-friends" onclick="switchTab('friends')">Friends</button>
+            <button class="tab-btn" id="tab-requests" onclick="switchTab('requests')">Requests <span
+                    id="req-count-badge" style="display:none;"></span></button>
         </div>
+
+        <!-- Contact list -->
+        <div class="contact-list" id="contact-list" role="list"></div>
     </aside>
 
-    <!-- Main content area -->
-    <main class="main-area">
+    <!-- Main Chat Area -->
+    <main class="chat-area" id="chat-area">
+        <!-- Mobile Header -->
+        <div class="mobile-header" id="mobile-header">
+            <button aria-label="Open menu" class="mobile-menu-btn" onclick="toggleSidebar()">
+                <svg fill="none" height="20" stroke="currentColor" stroke-width="2"
+                     viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg">
+                    <line x1="3" x2="21" y1="12" y2="12"/>
+                    <line x1="3" x2="21" y1="6" y2="6"/>
+                    <line x1="3" x2="21" y1="18" y2="18"/>
+                </svg>
+            </button>
+            <span class="mobile-header-title">Aura</span>
+            <button aria-label="Add friend" class="mobile-add-btn" onclick="openAddFriendModal()">
+                <svg fill="none" height="18" stroke="currentColor" stroke-width="2"
+                     viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">
+                    <line x1="12" x2="12" y1="5" y2="19"/>
+                    <line x1="5" x2="19" y1="12" y2="12"/>
+                </svg>
+            </button>
+        </div>
 
-        <!-- ---- CHATS PANEL ---- -->
-        <div class="panel active" id="panel-chats">
-            <div class="panel-header">
-                <h2>Chats</h2>
-            </div>
-            <div class="chat-layout">
-                <div class="chat-list" id="chat-list">
-                    <p class="empty-state">No conversations yet.<br/>Add some friends to get started.</p>
-                </div>
-                <div class="chat-window" id="chat-window">
-                    <div class="chat-window-empty" id="chat-empty-state">
-                        <span class="chat-empty-icon">💬</span>
-                        <p>Select a conversation</p>
+        <!-- No Conversation Selected -->
+        <div class="chat-empty" id="chat-empty">
+            <div class="chat-empty-icon">✦</div>
+            <h3>Pick a conversation</h3>
+            <p>Select a friend from the sidebar to start messaging, or add someone new.</p>
+            <button class="btn btn-ghost" onclick="openAddFriendModal()" style="margin-top: 8px;">
+                <svg fill="none" height="15" stroke="currentColor" stroke-width="2"
+                     viewBox="0 0 24 24" width="15" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <line x1="19" x2="19" y1="8" y2="14"/>
+                    <line x1="22" x2="16" y1="11" y2="11"/>
+                </svg>
+                Find People
+            </button>
+        </div>
+
+        <!-- Active Chat -->
+        <div class="hidden" id="active-chat"
+             style="display:none; flex-direction:column; flex:1; min-height:0; position:relative; z-index:1;">
+            <!-- Chat Header -->
+            <div class="chat-header" id="chat-header">
+                <div class="avatar size-md" id="chat-header-avatar"></div>
+                <div class="chat-header-info">
+                    <div class="chat-header-name" id="chat-header-name"></div>
+                    <div class="chat-header-status" id="chat-header-status">
+                        <span class="status-dot"></span>
+                        <span>Active</span>
                     </div>
-                    <div class="chat-active hidden" id="chat-active">
-                        <div class="chat-header" id="chat-header">
-                            <span id="chat-with-name">—</span>
-                        </div>
-                        <div class="messages-area" id="messages-area"></div>
-                        <div class="message-input-row">
-                            <input type="text" id="msg-input" placeholder="Type a message..."
-                                   onkeydown="if(event.key==='Enter') sendMessage()"/>
-                            <button class="btn-send" onclick="sendMessage()">Send</button>
-                        </div>
-                    </div>
+                </div>
+                <div class="chat-header-actions">
+                    <button class="icon-btn" id="info-toggle-btn" onclick="toggleInfoPanel()" title="View profile">
+                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+                             xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" x2="12" y1="8" y2="12"/>
+                            <line x1="12" x2="12.01" y1="16" y2="16"/>
+                        </svg>
+                    </button>
                 </div>
             </div>
-        </div>
 
-        <!-- ---- FRIENDS PANEL ---- -->
-        <div class="panel hidden" id="panel-friends">
-            <div class="panel-header">
-                <h2>Friends</h2>
-            </div>
-            <div id="friends-list" class="card-list">
-                <p class="empty-state">Loading...</p>
-            </div>
-        </div>
+            <!-- Messages Container -->
+            <div class="messages-container" id="messages-container"></div>
 
-        <!-- ---- REQUESTS PANEL ---- -->
-        <div class="panel hidden" id="panel-requests">
-            <div class="panel-header">
-                <h2>Friend Requests</h2>
-            </div>
-            <div id="requests-list" class="card-list">
-                <p class="empty-state">No pending requests.</p>
-            </div>
-        </div>
-
-        <!-- ---- SEARCH PANEL ---- -->
-        <div class="panel hidden" id="panel-search">
-            <div class="panel-header">
-                <h2>Find People</h2>
-            </div>
-            <div class="search-bar">
-                <input type="text" id="search-input" placeholder="Search by username..." oninput="debounceSearch()"/>
-            </div>
-            <div id="search-results" class="card-list"></div>
-        </div>
-
-        <!-- ---- BLOCKED PANEL ---- -->
-        <div class="panel hidden" id="panel-blocked">
-            <div class="panel-header">
-                <h2>Blocked Users</h2>
-            </div>
-            <div id="blocked-list" class="card-list">
-                <p class="empty-state">No blocked users.</p>
+            <!-- Chat Input -->
+            <div class="chat-input-bar">
+                <div class="chat-input-wrap">
+          <textarea
+                  class="chat-input"
+                  id="chat-input"
+                  oninput="autoResizeInput(this)"
+                  onkeydown="handleInputKeydown(event)"
+                  placeholder="Message…"
+                  rows="1"
+          ></textarea>
+                </div>
+                <button aria-label="Send message" class="chat-send-btn" disabled id="send-btn" onclick="sendMessage()">
+                    <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"
+                         xmlns="http://www.w3.org/2000/svg">
+                        <line x1="22" x2="11" y1="2" y2="13"/>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                    </svg>
+                </button>
             </div>
         </div>
-
     </main>
+
+    <!-- Info Panel -->
+    <div class="info-panel" id="info-panel">
+        <div class="info-panel-inner">
+            <div class="info-panel-avatar">
+                <div class="avatar size-xl" id="info-avatar"></div>
+                <div class="info-panel-name" id="info-name"></div>
+                <div class="info-panel-email" id="info-email"></div>
+            </div>
+            <div class="info-panel-actions">
+                <button class="btn btn-danger" id="block-btn" onclick="handleBlock()">
+                    <svg fill="none" height="14" stroke="currentColor" stroke-width="2"
+                         viewBox="0 0 24 24" width="14" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="4.93" x2="19.07" y1="4.93" y2="19.07"/>
+                    </svg>
+                    Block User
+                </button>
+                <button class="btn btn-ghost" onclick="toggleInfoPanel()">Close</button>
+            </div>
+        </div>
+    </div>
 </div>
 
-<!-- Toast notification -->
-<div id="toast" class="toast hidden"></div>
-
-<script src="/js/api.js"></script>
-<script src="/js/app.js"></script>
+<!-- ─── Add Friend Modal ──────────────────────────────── -->
+<div class="modal-overlay hidden" id="add-friend-modal">
+    <div aria-labelledby="modal-title" aria-modal="true" class="modal" role="dialog">
+        <button aria-label="Close" class="modal-close" onclick="closeAddFriendModal()">
+            <svg fill="none" height="16" stroke="currentColor" stroke-width="2"
+                 viewBox="0 0 24 24" width="16" xmlns="http://www.w3.org/2000/svg">
+                <line x1="18" x2="6" y1="6" y2="18"/>
+                <line x1="6" x2="18" y1="6" y2="18"/>
+            </svg>
+        </button>
+        <h3 class="modal-title" id="modal-title">Find People</h3>
+        <div class="search-wrap">
+            <svg class="search-icon" fill="none" stroke="currentColor" stroke-width="2"
+                 viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" x2="16.65" y1="21" y2="16.65"/>
+            </svg>
+            <input class="input-field" id="modal-search-input" oninput="handleModalSearch(this.value)" placeholder="Search by username…"
+                   style="padding-left:36px;" type="search"/>
+        </div>
+        <div class="modal-search-results" id="modal-search-results">
+            <p style="color:var(--clr-text-muted);font-size:13px;text-align:center;padding:24px 0;">
+                Start typing to search for users
+            </p>
+        </div>
+    </div>
+</div>
 </body>
 </html>

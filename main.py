@@ -11,6 +11,13 @@ load_dotenv()
 
 app = FastAPI()
 
+# ========================
+# ===== STATIC FILES =====
+# ========================
+
+app.mount("/styles", StaticFiles(directory="static/styles"), name="styles")
+app.mount("/js", StaticFiles(directory="static/js"), name="js")
+
 
 # ========================
 # ===== DB CONNECTION =====
@@ -568,21 +575,9 @@ def get_blocked_users(user_id: int):
         conn.close()
 
 
-# --- Serve frontend ---
-app.mount("/styles", StaticFiles(directory="static/styles"), name="styles")
-app.mount("/js", StaticFiles(directory="static/js"), name="js")
-
 @app.get("/")
 def serve_frontend():
     return FileResponse("static/index.html")
-
-@app.get("/login.html")
-def serve_login():
-    return FileResponse("static/login.html")
-
-@app.get("/register.html")
-def serve_register():
-    return FileResponse("static/register.html")
 
 
 if __name__ == "__main__":
