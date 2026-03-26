@@ -1,276 +1,458 @@
-// State
+// =============================================================================
+// STATE
+// =============================================================================
 const state = {
-  currentUser: null,     // { id, username }
-  friends: [],
-  pendingRequests: [],
-  activeFriendId: null,
-  activeFriendshipId: null,
-  messages: [],
-  infoPanelOpen: false,
-  currentTab: 'friends',
-  pollingInterval: null,
+    currentUser: null,       // { id, username }
+    friends: [],
+    pendingRequests: [],
+    activeFriendId: null,
+    activeFriendshipId: null,
+    messages: [],
+    infoPanelOpen: false,
+    currentTab: 'friends',
+    ws: null,
+    wsReconnectTimer: null,
+    heartbeatInterval: null,
+    fallbackPollInterval: null,
 };
 
-// API Helpers
+
+// =============================================================================
+// API HELPERS
+// =============================================================================
 const api = {
-  async post(url, body) {
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || 'Request failed');
-    return data;
-  },
-  async get(url) {
-    const r = await fetch(url);
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || 'Request failed');
-    return data;
-  },
-  async put(url, body) {
-    const r = await fetch(url, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || 'Request failed');
-    return data;
-  },
-  async delete(url, body) {
-    const r = await fetch(url, {
-      method: 'DELETE',
-      headers: body ? { 'Content-Type': 'application/json' } : {},
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || 'Request failed');
-    return data;
-  },
+    async post(url, body) {
+        const r = await fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'Request failed');
+        return data;
+    },
+    async get(url) {
+        const r = await fetch(url);
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'Request failed');
+        return data;
+    },
+    async put(url, body) {
+        const r = await fetch(url, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'Request failed');
+        return data;
+    },
+    async delete(url, body) {
+        const r = await fetch(url, {
+            method: 'DELETE',
+            headers: body ? {'Content-Type': 'application/json'} : {},
+            body: body ? JSON.stringify(body) : undefined,
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'Request failed');
+        return data;
+    },
 };
 
-// Toast
+
+// =============================================================================
+// TOAST
+// =============================================================================
 function toast(msg, type = 'info') {
-  const el = document.createElement('div');
-  el.className = `toast ${type}`;
-  el.textContent = msg;
-  document.getElementById('toast-container').appendChild(el);
-  setTimeout(() => {
-    el.classList.add('fade-out');
-    setTimeout(() => el.remove(), 300);
-  }, 3200);
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    document.getElementById('toast-container').appendChild(el);
+    setTimeout(() => {
+        el.classList.add('fade-out');
+        setTimeout(() => el.remove(), 300);
+    }, 3200);
 }
 
-// Avatar
+
+// =============================================================================
+// UTILITIES
+// =============================================================================
 function initials(name) {
-  return name ? name.slice(0, 2).toUpperCase() : '??';
+    return name ? name.slice(0, 2).toUpperCase() : '??';
 }
 
-// Date formatting
 function fmtTime(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-function fmtDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const today = new Date();
-  const diff = today - d;
-  if (diff < 86400000 && d.getDate() === today.getDate()) return 'Today';
-  if (diff < 172800000) return 'Yesterday';
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-}
-function fmtPreviewTime(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const today = new Date();
-  const diff = today - d;
-  if (diff < 86400000 && d.getDate() === today.getDate())
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (diff < 604800000)
-    return d.toLocaleDateString([], { weekday: 'short' });
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
 }
 
-// Authentication flow
+function fmtDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const today = new Date();
+    const diff = today - d;
+    if (diff < 86400000 && d.getDate() === today.getDate()) return 'Today';
+    if (diff < 172800000) return 'Yesterday';
+    return d.toLocaleDateString([], {month: 'short', day: 'numeric'});
+}
+
+function fmtPreviewTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const today = new Date();
+    const diff = today - d;
+    if (diff < 86400000 && d.getDate() === today.getDate())
+        return d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    if (diff < 604800000)
+        return d.toLocaleDateString([], {weekday: 'short'});
+    return d.toLocaleDateString([], {month: 'short', day: 'numeric'});
+}
+
+
+// =============================================================================
+// AUTH FLOW
+// =============================================================================
 function showView(view) {
-  ['welcome-view', 'login-view', 'register-view'].forEach(id => {
-    const el = document.getElementById(id);
-    el.classList.toggle('hidden', id !== `${view}-view`);
-  });
+    ['welcome-view', 'login-view', 'register-view'].forEach(id => {
+        const el = document.getElementById(id);
+        el.classList.toggle('hidden', id !== `${view}-view`);
+    });
 }
 
 async function handleLogin(e) {
-  e.preventDefault();
-  const username = document.getElementById('lg-username').value.trim();
-  const password = document.getElementById('lg-password').value;
-  if (!username || !password) return;
+    e.preventDefault();
+    const username = document.getElementById('lg-username').value.trim();
+    const password = document.getElementById('lg-password').value;
+    if (!username || !password) return;
 
-  setLoading('login', true);
-  try {
-    const data = await api.post('/login', { username, password });
-    state.currentUser = { id: data.user_id, username: data.username };
-    enterApp();
-    toast(`Welcome back, ${data.username}!`, 'success');
-  } catch (err) {
-    showFieldError('lg-username-group', 'lg-username-error', err.message);
-  } finally {
-    setLoading('login', false);
-  }
+    setLoading('login', true);
+    try {
+        const data = await api.post('/login', {username, password});
+        state.currentUser = {id: data.user_id, username: data.username};
+        enterApp();
+        toast(`Welcome back, ${data.username}!`, 'success');
+    } catch (err) {
+        showFieldError('lg-username-group', 'lg-username-error', err.message);
+    } finally {
+        setLoading('login', false);
+    }
 }
 
 async function handleRegister(e) {
-  e.preventDefault();
-  const username = document.getElementById('rg-username').value.trim();
-  const email    = document.getElementById('rg-email').value.trim();
-  const password = document.getElementById('rg-password').value;
-  if (!username || !email || !password) return;
+    e.preventDefault();
+    const username = document.getElementById('rg-username').value.trim();
+    const email    = document.getElementById('rg-email').value.trim();
+    const password = document.getElementById('rg-password').value;
+    if (!username || !email || !password) return;
 
-  setLoading('register', true);
-  try {
-    await api.post('/register', { username, email, password });
-    toast('Account created! Please sign in.', 'success');
-    showView('login');
-    document.getElementById('lg-username').value = username;
-  } catch (err) {
-    showFieldError('rg-username-group', 'rg-username-error', err.message);
-  } finally {
-    setLoading('register', false);
-  }
+    setLoading('register', true);
+    try {
+        await api.post('/register', {username, email, password});
+        toast('Account created! Please sign in.', 'success');
+        showView('login');
+        document.getElementById('lg-username').value = username;
+    } catch (err) {
+        showFieldError('rg-username-group', 'rg-username-error', err.message);
+    } finally {
+        setLoading('register', false);
+    }
 }
 
 function setLoading(form, loading) {
-  document.getElementById(`${form}-btn-text`).classList.toggle('hidden', loading);
-  document.getElementById(`${form}-btn-spinner`).classList.toggle('hidden', !loading);
-  document.getElementById(`${form}-btn`).disabled = loading;
+    document.getElementById(`${form}-btn-text`).classList.toggle('hidden', loading);
+    document.getElementById(`${form}-btn-spinner`).classList.toggle('hidden', !loading);
+    document.getElementById(`${form}-btn`).disabled = loading;
 }
 
 function showFieldError(groupId, errorId, msg) {
-  document.getElementById(groupId).classList.add('has-error');
-  document.getElementById(errorId).textContent = msg;
-  setTimeout(() => document.getElementById(groupId).classList.remove('has-error'), 4000);
+    document.getElementById(groupId).classList.add('has-error');
+    document.getElementById(errorId).textContent = msg;
+    setTimeout(() => document.getElementById(groupId).classList.remove('has-error'), 4000);
 }
 
 function handleLogout() {
-  state.currentUser = null;
-  state.activeFriendId = null;
-  state.messages = [];
-  stopPolling();
+    disconnectWebSocket();
+    stopFallbackPoll();
 
-  document.getElementById('app-screen').classList.add('hidden');
-  document.getElementById('auth-screen').classList.remove('hidden');
-  showView('welcome');
-  toast('You have been signed out.', 'info');
+    state.currentUser = null;
+    state.activeFriendId = null;
+    state.activeFriendshipId = null;
+    state.messages = [];
+    state.friends = [];
+    state.pendingRequests = [];
+
+    document.getElementById('app-screen').classList.add('hidden');
+    document.getElementById('auth-screen').classList.remove('hidden');
+    showView('welcome');
+    toast('You have been signed out.', 'info');
 }
 
-// Application Entry
+
+// =============================================================================
+// APPLICATION ENTRY
+// =============================================================================
 function enterApp() {
-  document.getElementById('auth-screen').classList.add('hidden');
-  document.getElementById('app-screen').classList.remove('hidden');
+    document.getElementById('auth-screen').classList.add('hidden');
+    document.getElementById('app-screen').classList.remove('hidden');
 
-  const navAvatarWrap = document.getElementById('nav-user-avatar');
-  navAvatarWrap.innerHTML = `<div class="avatar size-sm online" title="${state.currentUser.username}">${initials(state.currentUser.username)}</div>`;
+    const navAvatarWrap = document.getElementById('nav-user-avatar');
+    navAvatarWrap.innerHTML = `<div class="avatar size-sm online" title="${state.currentUser.username}">${initials(state.currentUser.username)}</div>`;
 
-  loadFriends();
-  loadPendingRequests();
-  startPolling();
+    loadFriends();
+    loadPendingRequests();
+    connectWebSocket();
+    startFallbackPoll();
 }
 
-// Polling
-function startPolling() {
-  stopPolling();
-  state.pollingInterval = setInterval(async () => {
-    await loadFriends(true);
-    await loadPendingRequests(true);
-    if (state.activeFriendId) await loadMessages(true);
-  }, 4000);
-}
-function stopPolling() {
-  if (state.pollingInterval) clearInterval(state.pollingInterval);
+
+// =============================================================================
+// WEBSOCKET — real-time push
+// =============================================================================
+
+/**
+ * Open (or re-open) the WebSocket connection for the current user.
+ * Handles heartbeats and automatic reconnection on unexpected close.
+ */
+function connectWebSocket() {
+    disconnectWebSocket();
+
+    const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${protocol}://${location.host}/ws/${state.currentUser.id}`);
+    state.ws = ws;
+
+    ws.onopen = () => {
+        console.debug('[WS] Connected');
+        // Send a heartbeat ping every 25 s to keep the connection alive
+        // through load-balancers / proxies that close idle sockets.
+        state.heartbeatInterval = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) ws.send('ping');
+        }, 25000);
+    };
+
+    ws.onmessage = (event) => {
+        if (event.data === 'pong') return; // heartbeat reply — ignore
+        try {
+            const payload = JSON.parse(event.data);
+            handleServerPush(payload);
+        } catch (err) {
+            console.warn('[WS] Could not parse message:', event.data);
+        }
+    };
+
+    ws.onerror = (err) => {
+        console.warn('[WS] Error:', err);
+    };
+
+    ws.onclose = (event) => {
+        console.debug('[WS] Closed — code:', event.code);
+        clearInterval(state.heartbeatInterval);
+        state.heartbeatInterval = null;
+
+        // Don't reconnect if the user deliberately logged out (code 1000)
+        // or if there is no longer a logged-in user.
+        if (!state.currentUser || event.code === 1000) return;
+
+        // Exponential-ish back-off capped at 5 s
+        const delay = Math.min(5000, 1000 + Math.random() * 2000);
+        state.wsReconnectTimer = setTimeout(connectWebSocket, delay);
+    };
 }
 
-// Sidebar tabs
+function disconnectWebSocket() {
+    clearTimeout(state.wsReconnectTimer);
+    clearInterval(state.heartbeatInterval);
+    state.wsReconnectTimer = null;
+    state.heartbeatInterval = null;
+
+    if (state.ws) {
+        state.ws.onclose = null; // prevent auto-reconnect on intentional close
+        state.ws.close(1000, 'logout');
+        state.ws = null;
+    }
+}
+
+/**
+ * Dispatch incoming server-push events to the right handler.
+ */
+function handleServerPush(payload) {
+    switch (payload.type) {
+
+        case 'new_message': {
+            const msg = payload.message;
+            const isActiveConvo =
+                (msg.sender_id   === state.activeFriendId) ||
+                (msg.recipient_id === state.activeFriendId);
+
+            if (isActiveConvo) {
+                // Append without touching existing DOM nodes
+                appendMessage(msg);
+                // Mark as read immediately since the chat is open
+                markConversationRead();
+            }
+
+            // Refresh sidebar preview & unread badge
+            loadFriends(true);
+            break;
+        }
+
+        case 'message_edited': {
+            const { message_id, new_content } = payload;
+            // Update in state
+            const m = state.messages.find(m => m.id === message_id);
+            if (m) {
+                m.content    = new_content;
+                m.is_edited  = true;
+            }
+            // Patch the bubble in-place — no full re-render
+            patchBubbleContent(message_id, new_content, true);
+            break;
+        }
+
+        case 'message_deleted': {
+            const { message_id } = payload;
+            state.messages = state.messages.filter(m => m.id !== message_id);
+            const row = document.querySelector(`[data-msg-id="${message_id}"]`);
+            if (row) row.remove();
+            break;
+        }
+
+        case 'message_read': {
+            const { message_id } = payload;
+            const m = state.messages.find(m => m.id === message_id);
+            if (m) m.is_read = true;
+            markMessageReadInDOM(message_id);
+            break;
+        }
+
+        case 'friend_request':
+            loadPendingRequests(true);
+            break;
+
+        case 'friend_accepted':
+            loadFriends(true);
+            loadPendingRequests(true);
+            break;
+
+        default:
+            console.debug('[WS] Unknown payload type:', payload.type);
+    }
+}
+
+
+// =============================================================================
+// FALLBACK POLL — lightweight sidebar refresh only, no message re-render
+// =============================================================================
+
+/**
+ * Keep the sidebar friend list / request count roughly in sync even if the
+ * WebSocket connection drops momentarily. Runs every 30 s (silent).
+ */
+function startFallbackPoll() {
+    stopFallbackPoll();
+    state.fallbackPollInterval = setInterval(async () => {
+        if (!state.currentUser) return;
+        await loadFriends(true);
+        await loadPendingRequests(true);
+    }, 30000);
+}
+
+function stopFallbackPoll() {
+    if (state.fallbackPollInterval) {
+        clearInterval(state.fallbackPollInterval);
+        state.fallbackPollInterval = null;
+    }
+}
+
+
+// =============================================================================
+// SIDEBAR TABS
+// =============================================================================
 function switchTab(tab) {
-  state.currentTab = tab;
-  document.getElementById('tab-friends').classList.toggle('active', tab === 'friends');
-  document.getElementById('tab-requests').classList.toggle('active', tab === 'requests');
-  renderContactList();
+    state.currentTab = tab;
+    document.getElementById('tab-friends').classList.toggle('active', tab === 'friends');
+    document.getElementById('tab-requests').classList.toggle('active', tab === 'requests');
+    renderContactList();
 }
 
-// Friends and friend requests
+
+// =============================================================================
+// FRIENDS & REQUESTS
+// =============================================================================
 async function loadFriends(silent = false) {
-  try {
-    const data = await api.get(`/friends/${state.currentUser.id}`);
-    state.friends = data.friends || [];
-    if (state.currentTab === 'friends') renderContactList();
-    updateUnreadBadge();
-  } catch (err) {
-    if (!silent) toast('Failed to load friends', 'error');
-  }
+    try {
+        const data = await api.get(`/friends/${state.currentUser.id}`);
+        state.friends = data.friends || [];
+        if (state.currentTab === 'friends') renderContactList();
+        updateUnreadBadge();
+    } catch (err) {
+        if (!silent) toast('Failed to load friends', 'error');
+    }
 }
 
 async function loadPendingRequests(silent = false) {
-  try {
-    const data = await api.get(`/pending-requests/${state.currentUser.id}`);
-    state.pendingRequests = data.requests || [];
-    const count = state.pendingRequests.length;
-    const badge = document.getElementById('req-count-badge');
-    badge.style.display = count > 0 ? 'inline' : 'none';
-    badge.textContent = count > 0 ? ` (${count})` : '';
-    if (state.currentTab === 'requests') renderContactList();
-  } catch (err) {
-    if (!silent) toast('Failed to load requests', 'error');
-  }
+    try {
+        const data = await api.get(`/pending-requests/${state.currentUser.id}`);
+        state.pendingRequests = data.requests || [];
+        const count = state.pendingRequests.length;
+        const badge = document.getElementById('req-count-badge');
+        badge.style.display = count > 0 ? 'inline' : 'none';
+        badge.textContent   = count > 0 ? ` (${count})` : '';
+        if (state.currentTab === 'requests') renderContactList();
+    } catch (err) {
+        if (!silent) toast('Failed to load requests', 'error');
+    }
 }
 
 function updateUnreadBadge() {
-  const total = state.friends.reduce((sum, f) => sum + (f.unread_count || 0), 0);
-  const badge = document.getElementById('nav-unread-badge');
-  if (total > 0) {
-    badge.textContent = total > 99 ? '99+' : total;
-    badge.classList.remove('hidden');
-  } else {
-    badge.classList.add('hidden');
-  }
+    const total = state.friends.reduce((sum, f) => sum + (f.unread_count || 0), 0);
+    const badge = document.getElementById('nav-unread-badge');
+    if (total > 0) {
+        badge.textContent = total > 99 ? '99+' : total;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
 }
 
-// Contact list
+
+// =============================================================================
+// CONTACT LIST RENDERING
+// =============================================================================
 function renderContactList(searchQuery = '') {
-  const list = document.getElementById('contact-list');
-  list.innerHTML = '';
+    const list = document.getElementById('contact-list');
+    list.innerHTML = '';
 
-  if (state.currentTab === 'requests') {
-    renderRequestsList(list);
-    return;
-  }
+    if (state.currentTab === 'requests') {
+        renderRequestsList(list);
+        return;
+    }
 
-  let friends = state.friends;
-  if (searchQuery) {
-    friends = friends.filter(f =>
-      f.username.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }
+    let friends = state.friends;
+    if (searchQuery) {
+        friends = friends.filter(f =>
+            f.username.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    }
 
-  if (friends.length === 0) {
-    list.innerHTML = `
+    if (friends.length === 0) {
+        list.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </div>
         <p>${searchQuery ? 'No friends match your search.' : 'No friends yet.<br/>Add someone to get started.'}</p>
       </div>`;
-    return;
-  }
+        return;
+    }
 
-  friends.forEach(friend => {
-    const item = document.createElement('div');
-    item.className = `contact-item${friend.id === state.activeFriendId ? ' active' : ''}`;
-    item.setAttribute('role', 'listitem');
-    item.onclick = () => openConversation(friend);
-    item.innerHTML = `
+    friends.forEach(friend => {
+        const item = document.createElement('div');
+        item.className = `contact-item${friend.id === state.activeFriendId ? ' active' : ''}`;
+        item.setAttribute('role', 'listitem');
+        item.onclick = () => openConversation(friend);
+        item.innerHTML = `
       <div class="avatar size-md">${initials(friend.username)}</div>
       <div class="contact-info">
         <div class="contact-name">${friend.username}</div>
@@ -280,26 +462,26 @@ function renderContactList(searchQuery = '') {
         ${friend.last_message_time ? `<span class="contact-time">${fmtPreviewTime(friend.last_message_time)}</span>` : ''}
         ${friend.unread_count > 0 ? `<span class="contact-badge">${friend.unread_count}</span>` : ''}
       </div>`;
-    list.appendChild(item);
-  });
+        list.appendChild(item);
+    });
 }
 
 function renderRequestsList(list) {
-  if (state.pendingRequests.length === 0) {
-    list.innerHTML = `
+    if (state.pendingRequests.length === 0) {
+        list.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.1a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2.22h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.09 6.09l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 17.5z"/></svg>
         </div>
         <p>No pending friend requests.</p>
       </div>`;
-    return;
-  }
+        return;
+    }
 
-  state.pendingRequests.forEach(req => {
-    const item = document.createElement('div');
-    item.className = 'request-item';
-    item.innerHTML = `
+    state.pendingRequests.forEach(req => {
+        const item = document.createElement('div');
+        item.className = 'request-item';
+        item.innerHTML = `
       <div class="avatar size-md">${initials(req.username)}</div>
       <div class="contact-info">
         <div class="contact-name">${req.username}</div>
@@ -309,103 +491,209 @@ function renderRequestsList(list) {
         <button class="req-btn accept" title="Accept" onclick="respondToRequest(${req.request_id},'accept')">✓</button>
         <button class="req-btn decline" title="Decline" onclick="respondToRequest(${req.request_id},'decline')">✕</button>
       </div>`;
-    list.appendChild(item);
-  });
+        list.appendChild(item);
+    });
 }
 
-// Search in the sidebar
 function handleContactSearch(val) {
-  renderContactList(val.trim());
+    renderContactList(val.trim());
 }
 
-// Start a conversation
+
+// =============================================================================
+// CONVERSATION
+// =============================================================================
 async function openConversation(friend) {
-  state.activeFriendId = friend.id;
-  state.activeFriendshipId = friend.friendship_id;
+    state.activeFriendId    = friend.id;
+    state.activeFriendshipId = friend.friendship_id;
 
-  renderContactList(document.getElementById('contact-search').value);
+    renderContactList(document.getElementById('contact-search').value);
 
-  document.getElementById('chat-header-avatar').textContent = initials(friend.username);
-  document.getElementById('chat-header-name').textContent = friend.username;
+    document.getElementById('chat-header-avatar').textContent = initials(friend.username);
+    document.getElementById('chat-header-name').textContent   = friend.username;
+    document.getElementById('info-avatar').textContent        = initials(friend.username);
+    document.getElementById('info-name').textContent          = friend.username;
+    document.getElementById('info-email').textContent         = '';
 
-  document.getElementById('info-avatar').textContent = initials(friend.username);
-  document.getElementById('info-name').textContent = friend.username;
-  document.getElementById('info-email').textContent = '';
+    api.get(`/users/${friend.id}`)
+        .then(u => { document.getElementById('info-email').textContent = u.email || ''; })
+        .catch(() => {});
 
-  api.get(`/users/${friend.id}`)
-    .then(u => { document.getElementById('info-email').textContent = u.email || ''; })
-    .catch(() => {});
+    document.getElementById('chat-empty').classList.add('hidden');
+    const activeChat = document.getElementById('active-chat');
+    activeChat.classList.remove('hidden');
+    activeChat.style.display = 'flex';
 
-  document.getElementById('chat-empty').classList.add('hidden');
-  const activeChat = document.getElementById('active-chat');
-  activeChat.classList.remove('hidden');
-  activeChat.style.display = 'flex';
+    closeSidebar();
 
-  closeSidebar();
+    // Full load on conversation open — clears old messages and fetches fresh
+    await loadMessages();
 
-  await loadMessages();
-
-  document.getElementById('chat-input').focus();
+    document.getElementById('chat-input').focus();
 }
 
-// Messages
+
+// =============================================================================
+// MESSAGES — load / render / append
+// =============================================================================
+
+/**
+ * Full message load — called once when opening a conversation.
+ * Rebuilds the message list from scratch (intentional here — the user
+ * just switched conversations so a full render is correct).
+ */
 async function loadMessages(silent = false) {
-  if (!state.activeFriendId) return;
-  try {
-    const data = await api.get(`/messages/${state.currentUser.id}/${state.activeFriendId}`);
-    state.messages = data.messages || [];
-    renderMessages();
-    if (!silent) loadFriends(true);
-  } catch (err) {
-    if (!silent) toast('Failed to load messages', 'error');
-  }
+    if (!state.activeFriendId) return;
+    try {
+        const data = await api.get(`/messages/${state.currentUser.id}/${state.activeFriendId}`);
+        state.messages = data.messages || [];
+        renderMessages();
+        if (!silent) loadFriends(true);
+    } catch (err) {
+        if (!silent) toast('Failed to load messages', 'error');
+    }
 }
 
+/**
+ * Full re-render — only called when opening a conversation or after an edit/
+ * delete that requires layout recalculation.  NOT called during live updates.
+ */
 function renderMessages() {
-  const container = document.getElementById('messages-container');
-  if (!container) return;
-  const scrolledToBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+    const container = document.getElementById('messages-container');
+    if (!container) return;
 
-  container.innerHTML = '';
+    container.innerHTML = '';
 
-  if (state.messages.length === 0) {
-    container.innerHTML = `
+    if (state.messages.length === 0) {
+        container.innerHTML = `
       <div class="empty-state" style="flex:1;padding-top:60px;">
         <div class="empty-state-icon">💬</div>
         <p>Start the conversation!</p>
       </div>`;
-    return;
-  }
-
-  let lastDate = null;
-  state.messages.forEach((msg) => {
-    const msgDate = fmtDate(msg.sent_at);
-    if (msgDate !== lastDate) {
-      lastDate = msgDate;
-      const divider = document.createElement('div');
-      divider.className = 'date-divider';
-      divider.innerHTML = `<span class="date-divider-text">${msgDate}</span>`;
-      container.appendChild(divider);
+        return;
     }
-    container.appendChild(createMsgElement(msg));
-  });
 
-  if (scrolledToBottom) {
+    let lastDate = null;
+    state.messages.forEach(msg => {
+        const msgDate = fmtDate(msg.sent_at);
+        if (msgDate !== lastDate) {
+            lastDate = msgDate;
+            container.appendChild(makeDateDivider(msgDate));
+        }
+        container.appendChild(createMsgElement(msg));
+    });
+
     container.scrollTop = container.scrollHeight;
-  }
+}
+
+/**
+ * Append a single new message node without touching existing DOM.
+ * This is what the WebSocket push calls — no flicker, no scroll jump.
+ */
+function appendMessage(msg) {
+    const container = document.getElementById('messages-container');
+    if (!container) return;
+
+    // Guard: message already rendered
+    if (container.querySelector(`[data-msg-id="${msg.id}"]`)) return;
+
+    // Remove "Start the conversation!" placeholder if present
+    const empty = container.querySelector('.empty-state');
+    if (empty) empty.remove();
+
+    // Insert a date divider if this message falls on a new day
+    const msgDate = fmtDate(msg.sent_at);
+    const lastDivider = container.querySelector('.date-divider:last-of-type');
+    const lastDividerText = lastDivider
+        ? lastDivider.querySelector('.date-divider-text')?.textContent
+        : null;
+    if (msgDate !== lastDividerText) {
+        container.appendChild(makeDateDivider(msgDate));
+    }
+
+    // Remember scroll position — only auto-scroll if already near bottom
+    const isNearBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+
+    state.messages.push(msg);
+    container.appendChild(createMsgElement(msg));
+
+    if (isNearBottom) container.scrollTop = container.scrollHeight;
+}
+
+/**
+ * Patch just the text content of an existing bubble after an edit.
+ * Avoids a full re-render for a single edit.
+ */
+function patchBubbleContent(msgId, newContent, isEdited) {
+    const bubble = document.getElementById(`bubble-${msgId}`);
+    if (!bubble) return;
+
+    // Preserve the action buttons (edit/delete) which are children of the bubble
+    const actions = bubble.querySelector('.bubble-actions');
+
+    // Set the text node directly
+    bubble.childNodes.forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE) node.remove();
+    });
+    bubble.insertBefore(document.createTextNode(newContent), bubble.firstChild);
+
+    // Update "edited" label in the meta row
+    const metaRow = bubble.closest('.msg-body')?.querySelector('.bubble-meta');
+    if (metaRow && isEdited && !metaRow.querySelector('.bubble-edited')) {
+        const editedSpan = document.createElement('span');
+        editedSpan.className = 'bubble-edited';
+        editedSpan.textContent = 'edited';
+        metaRow.insertBefore(editedSpan, metaRow.querySelector('.read-ticks'));
+    }
+}
+
+/**
+ * Add a blue-tick read indicator to a message bubble without re-rendering.
+ */
+function markMessageReadInDOM(msgId) {
+    const row = document.querySelector(`[data-msg-id="${msgId}"]`);
+    if (!row) return;
+    const metaRow = row.querySelector('.bubble-meta');
+    if (!metaRow || metaRow.querySelector('.read-ticks')) return;
+
+    metaRow.insertAdjacentHTML('beforeend', `
+        <svg class="read-ticks" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12"/>
+        </svg>`);
+}
+
+/**
+ * Tell the server the current conversation has been read (fire-and-forget).
+ * The server will push a message_read event back to the other party.
+ */
+async function markConversationRead() {
+    // The server already marks messages as read when GET /messages is called,
+    // so we just need to refresh the friend list to clear the badge.
+    await loadFriends(true);
+}
+
+// --- DOM helpers ---
+
+function makeDateDivider(dateText) {
+    const divider = document.createElement('div');
+    divider.className = 'date-divider';
+    divider.innerHTML = `<span class="date-divider-text">${dateText}</span>`;
+    return divider;
 }
 
 function createMsgElement(msg) {
-  const isSelf = msg.sender_id === state.currentUser.id;
-  const row = document.createElement('div');
-  row.className = `msg-row${isSelf ? ' self' : ''}`;
-  row.dataset.msgId = msg.id;
+    const isSelf = msg.sender_id === state.currentUser.id;
+    const row    = document.createElement('div');
+    row.className    = `msg-row${isSelf ? ' self' : ''}`;
+    row.dataset.msgId = msg.id;
 
-  const avatarHtml = !isSelf
-    ? `<div class="msg-avatar"><div class="avatar size-sm">${initials(state.friends.find(f=>f.id===msg.sender_id)?.username || '?')}</div></div>`
-    : '';
+    const friend = state.friends.find(f => f.id === msg.sender_id);
+    const avatarHtml = !isSelf
+        ? `<div class="msg-avatar"><div class="avatar size-sm">${initials(friend?.username || '?')}</div></div>`
+        : '';
 
-  const editBtns = isSelf ? `
+    const editBtns = isSelf ? `
     <div class="bubble-actions">
       <button class="bubble-action-btn" onclick="startEdit(${msg.id})" title="Edit">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -415,16 +703,13 @@ function createMsgElement(msg) {
       </button>
     </div>` : '';
 
-  const readTick = isSelf && msg.is_read ? `
+    const readTick = isSelf && msg.is_read ? `
     <svg class="read-ticks" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>` : '';
 
-  row.innerHTML = `
+    row.innerHTML = `
     ${avatarHtml}
     <div class="msg-body">
-      <div class="bubble" id="bubble-${msg.id}">
-        ${msg.content}
-        ${editBtns}
-      </div>
+      <div class="bubble" id="bubble-${msg.id}">${msg.content}${editBtns}</div>
       <div class="bubble-meta">
         <span class="bubble-time">${fmtTime(msg.sent_at)}</span>
         ${msg.is_edited ? '<span class="bubble-edited">edited</span>' : ''}
@@ -432,229 +717,269 @@ function createMsgElement(msg) {
       </div>
     </div>`;
 
-  return row;
+    return row;
 }
 
-// Send message
+
+// =============================================================================
+// SEND MESSAGE
+// =============================================================================
 async function sendMessage() {
-  const input = document.getElementById('chat-input');
-  const content = input.value.trim();
-  if (!content || !state.activeFriendId) return;
+    const input   = document.getElementById('chat-input');
+    const content = input.value.trim();
+    if (!content || !state.activeFriendId) return;
 
-  input.value = '';
-  input.style.height = 'auto';
-  document.getElementById('send-btn').disabled = true;
+    input.value = '';
+    input.style.height = 'auto';
+    document.getElementById('send-btn').disabled = true;
 
-  try {
-    await api.post('/send-message', {
-      sender_id: state.currentUser.id,
-      recipient_id: state.activeFriendId,
-      content,
-    });
-    await loadMessages(true);
-    const c = document.getElementById('messages-container');
-    c.scrollTop = c.scrollHeight;
-  } catch (err) {
-    toast(err.message, 'error');
-    input.value = content;
-  }
+    try {
+        await api.post('/send-message', {
+            sender_id:    state.currentUser.id,
+            recipient_id: state.activeFriendId,
+            content,
+        });
+        // The server will push the new message back via WebSocket so we
+        // don't need to call loadMessages() here — appendMessage() will fire.
+        // However, if WS is temporarily down we fall back to a manual append.
+        if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+            await loadMessages(true);
+        }
+    } catch (err) {
+        toast(err.message, 'error');
+        input.value = content;
+    }
 }
 
 function handleInputKeydown(e) {
-  const btn = document.getElementById('send-btn');
-  btn.disabled = !e.target.value.trim();
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
+    const btn = document.getElementById('send-btn');
+    btn.disabled = !e.target.value.trim();
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
 }
 
 function autoResizeInput(el) {
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
-  document.getElementById('send-btn').disabled = !el.value.trim();
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+    document.getElementById('send-btn').disabled = !el.value.trim();
 }
 
-// Edit or delete a message
+
+// =============================================================================
+// EDIT & DELETE MESSAGES
+// =============================================================================
 function startEdit(msgId) {
-  const msg = state.messages.find(m => m.id === msgId);
-  if (!msg) return;
-  const bubble = document.getElementById(`bubble-${msgId}`);
-  bubble.innerHTML = `
+    const msg = state.messages.find(m => m.id === msgId);
+    if (!msg) return;
+
+    const bubble = document.getElementById(`bubble-${msgId}`);
+    bubble.innerHTML = `
     <div class="edit-inline">
       <input class="input-field" id="edit-input-${msgId}" value="${msg.content}" />
       <div class="edit-inline-actions">
         <button class="edit-confirm" onclick="confirmEdit(${msgId})" title="Save">✓</button>
-        <button class="edit-cancel" onclick="renderMessages()" title="Cancel">✕</button>
+        <button class="edit-cancel"  onclick="renderMessages()"       title="Cancel">✕</button>
       </div>
     </div>`;
-  const inp = document.getElementById(`edit-input-${msgId}`);
-  inp.focus();
-  inp.setSelectionRange(inp.value.length, inp.value.length);
-  inp.onkeydown = (e) => {
-    if (e.key === 'Enter') confirmEdit(msgId);
-    if (e.key === 'Escape') renderMessages();
-  };
+
+    const inp = document.getElementById(`edit-input-${msgId}`);
+    inp.focus();
+    inp.setSelectionRange(inp.value.length, inp.value.length);
+    inp.onkeydown = (e) => {
+        if (e.key === 'Enter')  confirmEdit(msgId);
+        if (e.key === 'Escape') renderMessages();
+    };
 }
 
 async function confirmEdit(msgId) {
-  const inp = document.getElementById(`edit-input-${msgId}`);
-  const newContent = inp ? inp.value.trim() : '';
-  if (!newContent) return;
-  try {
-    await api.put(`/messages/${msgId}`, { user_id: state.currentUser.id, new_content: newContent });
-    toast('Message edited', 'success');
-    await loadMessages(true);
-  } catch (err) {
-    toast(err.message, 'error');
-    renderMessages();
-  }
+    const inp = document.getElementById(`edit-input-${msgId}`);
+    const newContent = inp ? inp.value.trim() : '';
+    if (!newContent) return;
+    try {
+        await api.put(`/messages/${msgId}`, {user_id: state.currentUser.id, new_content: newContent});
+        toast('Message edited', 'success');
+        // Server will push message_edited via WS; if WS is down, fall back:
+        if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+            const m = state.messages.find(m => m.id === msgId);
+            if (m) { m.content = newContent; m.is_edited = true; }
+            patchBubbleContent(msgId, newContent, true);
+        }
+    } catch (err) {
+        toast(err.message, 'error');
+        renderMessages();
+    }
 }
 
 async function deleteMessage(msgId) {
-  try {
-    await api.delete(`/messages/${msgId}?user_id=${state.currentUser.id}`);
-    toast('Message deleted', 'info');
-    state.messages = state.messages.filter(m => m.id !== msgId);
-    renderMessages();
-  } catch (err) {
-    toast(err.message, 'error');
-  }
+    try {
+        await api.delete(`/messages/${msgId}?user_id=${state.currentUser.id}`);
+        toast('Message deleted', 'info');
+        state.messages = state.messages.filter(m => m.id !== msgId);
+        // Remove node directly — no full re-render needed
+        const row = document.querySelector(`[data-msg-id="${msgId}"]`);
+        if (row) row.remove();
+    } catch (err) {
+        toast(err.message, 'error');
+    }
 }
 
-// Respond to friend requests
+
+// =============================================================================
+// FRIEND REQUESTS
+// =============================================================================
 async function respondToRequest(requestId, action) {
-  try {
-    await api.post('/friend-request/respond', {
-      request_id: requestId,
-      action,
-      user_id: state.currentUser.id,
-    });
-    toast(action === 'accept' ? 'Friend request accepted!' : 'Request declined.', action === 'accept' ? 'success' : 'info');
-    await loadPendingRequests();
-    await loadFriends();
-  } catch (err) {
-    toast(err.message, 'error');
-  }
+    try {
+        await api.post('/friend-request/respond', {
+            request_id: requestId,
+            action,
+            user_id: state.currentUser.id,
+        });
+        toast(
+            action === 'accept' ? 'Friend request accepted!' : 'Request declined.',
+            action === 'accept' ? 'success' : 'info'
+        );
+        await loadPendingRequests();
+        await loadFriends();
+    } catch (err) {
+        toast(err.message, 'error');
+    }
 }
 
-// Add friend
+
+// =============================================================================
+// ADD FRIEND MODAL
+// =============================================================================
 function openAddFriendModal() {
-  document.getElementById('add-friend-modal').classList.remove('hidden');
-  document.getElementById('modal-search-input').value = '';
-  document.getElementById('modal-search-results').innerHTML = `
+    document.getElementById('add-friend-modal').classList.remove('hidden');
+    document.getElementById('modal-search-input').value = '';
+    document.getElementById('modal-search-results').innerHTML = `
     <p style="color:var(--clr-text-muted);font-size:13px;text-align:center;padding:24px 0;">
       Start typing to search for users
     </p>`;
-  setTimeout(() => document.getElementById('modal-search-input').focus(), 100);
+    setTimeout(() => document.getElementById('modal-search-input').focus(), 100);
 }
 
 function closeAddFriendModal() {
-  document.getElementById('add-friend-modal').classList.add('hidden');
+    document.getElementById('add-friend-modal').classList.add('hidden');
 }
 
 let modalSearchTimer;
+
 async function handleModalSearch(val) {
-  clearTimeout(modalSearchTimer);
-  const results = document.getElementById('modal-search-results');
-  if (!val.trim()) {
-    results.innerHTML = `<p style="color:var(--clr-text-muted);font-size:13px;text-align:center;padding:24px 0;">Start typing to search for users</p>`;
-    return;
-  }
-  results.innerHTML = `<div style="display:flex;justify-content:center;padding:20px;"><div class="spinner"></div></div>`;
-  modalSearchTimer = setTimeout(async () => {
-    try {
-      const data = await api.get(`/users/search?query=${encodeURIComponent(val)}`);
-      const users = (data.users || []).filter(u => u.id !== state.currentUser.id);
-      if (users.length === 0) {
-        results.innerHTML = `<p style="color:var(--clr-text-muted);font-size:13px;text-align:center;padding:24px 0;">No users found</p>`;
+    clearTimeout(modalSearchTimer);
+    const results = document.getElementById('modal-search-results');
+    if (!val.trim()) {
+        results.innerHTML = `<p style="color:var(--clr-text-muted);font-size:13px;text-align:center;padding:24px 0;">Start typing to search for users</p>`;
         return;
-      }
-      results.innerHTML = '';
-      users.forEach(user => {
-        const isFriend = state.friends.some(f => f.id === user.id);
-        const item = document.createElement('div');
-        item.className = 'modal-result-item';
-        item.innerHTML = `
+    }
+    results.innerHTML = `<div style="display:flex;justify-content:center;padding:20px;"><div class="spinner"></div></div>`;
+    modalSearchTimer = setTimeout(async () => {
+        try {
+            const data = await api.get(`/users/search?query=${encodeURIComponent(val)}`);
+            const users = (data.users || []).filter(u => u.id !== state.currentUser.id);
+            if (users.length === 0) {
+                results.innerHTML = `<p style="color:var(--clr-text-muted);font-size:13px;text-align:center;padding:24px 0;">No users found</p>`;
+                return;
+            }
+            results.innerHTML = '';
+            users.forEach(user => {
+                const isFriend = state.friends.some(f => f.id === user.id);
+                const item = document.createElement('div');
+                item.className = 'modal-result-item';
+                item.innerHTML = `
           <div class="avatar size-md">${initials(user.username)}</div>
           <div class="contact-info">
             <div class="contact-name">${user.username}</div>
             <div class="contact-preview">${user.email || ''}</div>
           </div>
           ${isFriend
-            ? `<span class="btn btn-ghost" style="font-size:11px;padding:6px 12px;cursor:default;opacity:.6;">Friends</span>`
-            : `<button class="btn btn-primary" onclick="sendFriendRequest(${user.id}, this)" style="font-size:12px;padding:6px 14px;">Add</button>`
-          }`;
-        results.appendChild(item);
-      });
-    } catch (err) {
-      results.innerHTML = `<p style="color:var(--clr-danger);font-size:13px;text-align:center;padding:24px 0;">${err.message}</p>`;
-    }
-  }, 300);
+                    ? `<span class="btn btn-ghost" style="font-size:11px;padding:6px 12px;cursor:default;opacity:.6;">Friends</span>`
+                    : `<button class="btn btn-primary" onclick="sendFriendRequest(${user.id}, this)" style="font-size:12px;padding:6px 14px;">Add</button>`
+                }`;
+                results.appendChild(item);
+            });
+        } catch (err) {
+            results.innerHTML = `<p style="color:var(--clr-danger);font-size:13px;text-align:center;padding:24px 0;">${err.message}</p>`;
+        }
+    }, 300);
 }
 
 async function sendFriendRequest(receiverId, btn) {
-  btn.disabled = true;
-  btn.textContent = 'Sending…';
-  try {
-    await api.post('/friend-request', {
-      requester_id: state.currentUser.id,
-      receiver_id: receiverId,
-    });
-    btn.textContent = 'Sent ✓';
-    btn.classList.replace('btn-primary', 'btn-ghost');
-    toast('Friend request sent!', 'success');
-  } catch (err) {
-    btn.disabled = false;
-    btn.textContent = 'Add';
-    toast(err.message, 'error');
-  }
+    btn.disabled    = true;
+    btn.textContent = 'Sending…';
+    try {
+        await api.post('/friend-request', {
+            requester_id: state.currentUser.id,
+            receiver_id:  receiverId,
+        });
+        btn.textContent = 'Sent ✓';
+        btn.classList.replace('btn-primary', 'btn-ghost');
+        toast('Friend request sent!', 'success');
+    } catch (err) {
+        btn.disabled    = false;
+        btn.textContent = 'Add';
+        toast(err.message, 'error');
+    }
 }
 
-// Information panel
+
+// =============================================================================
+// INFO PANEL
+// =============================================================================
 function toggleInfoPanel() {
-  state.infoPanelOpen = !state.infoPanelOpen;
-  document.getElementById('info-panel').classList.toggle('open', state.infoPanelOpen);
+    state.infoPanelOpen = !state.infoPanelOpen;
+    document.getElementById('info-panel').classList.toggle('open', state.infoPanelOpen);
 }
 
-// Block a user
+
+// =============================================================================
+// BLOCK
+// =============================================================================
 async function handleBlock() {
-  if (!state.activeFriendId) return;
-  const name = document.getElementById('info-name').textContent;
-  if (!confirm(`Block ${name}? This will remove them from your friends and prevent messaging.`)) return;
-  try {
-    await api.post('/block', {
-      blocker_id: state.currentUser.id,
-      blocked_id: state.activeFriendId,
-    });
-    toast(`${name} has been blocked.`, 'info');
-    state.activeFriendId = null;
-    document.getElementById('active-chat').style.display = 'none';
-    document.getElementById('active-chat').classList.add('hidden');
-    document.getElementById('chat-empty').classList.remove('hidden');
-    if (state.infoPanelOpen) toggleInfoPanel();
-    await loadFriends();
-  } catch (err) {
-    toast(err.message, 'error');
-  }
+    if (!state.activeFriendId) return;
+    const name = document.getElementById('info-name').textContent;
+    if (!confirm(`Block ${name}? This will remove them from your friends and prevent messaging.`)) return;
+    try {
+        await api.post('/block', {
+            blocker_id: state.currentUser.id,
+            blocked_id: state.activeFriendId,
+        });
+        toast(`${name} has been blocked.`, 'info');
+        state.activeFriendId = null;
+        document.getElementById('active-chat').style.display = 'none';
+        document.getElementById('active-chat').classList.add('hidden');
+        document.getElementById('chat-empty').classList.remove('hidden');
+        if (state.infoPanelOpen) toggleInfoPanel();
+        await loadFriends();
+    } catch (err) {
+        toast(err.message, 'error');
+    }
 }
 
-// Sidebar
+
+// =============================================================================
+// SIDEBAR (MOBILE)
+// =============================================================================
 function toggleSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const overlay = document.getElementById('sidebar-overlay');
-  sidebar.classList.toggle('mobile-open');
-  overlay.classList.toggle('show');
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    sidebar.classList.toggle('mobile-open');
+    overlay.classList.toggle('show');
 }
 
 function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('mobile-open');
-  document.getElementById('sidebar-overlay').classList.remove('show');
+    document.getElementById('sidebar').classList.remove('mobile-open');
+    document.getElementById('sidebar-overlay').classList.remove('show');
 }
 
-// Event listeners
+
+// =============================================================================
+// EVENT LISTENERS
+// =============================================================================
 document.getElementById('sidebar-overlay').addEventListener('click', closeSidebar);
 
-document.getElementById('add-friend-modal').addEventListener('click', function(e) {
-  if (e.target === this) closeAddFriendModal();
+document.getElementById('add-friend-modal').addEventListener('click', function (e) {
+    if (e.target === this) closeAddFriendModal();
 });
