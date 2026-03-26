@@ -310,7 +310,7 @@ def get_unread_count(user_id: int):
 
 
 @app.get("/messages/{user_id}/{other_user_id}")
-def get_messages(user_id: int, other_user_id: int):
+async def get_messages(user_id: int, other_user_id: int):
     """
     Get the full conversation between two users.
     Also marks messages sent TO user_id as read and pushes
@@ -362,12 +362,10 @@ def get_messages(user_id: int, other_user_id: int):
         # Push read receipts to the other user (fire-and-forget via background task)
         # We schedule this after the response is built so it doesn't block the HTTP reply.
         import asyncio
-        loop = asyncio.get_event_loop()
         for mid in newly_read_ids:
-            loop.create_task(
-                manager.send_to_user(other_user_id, {"type": "message_read", "message_id": mid})
+            asyncio.create_task(
+                manager.send_to_user(other_user_id, {"type":"message_read", "message_id": mid})
             )
-
         return {"messages": messages}
 
     except Exception as e:

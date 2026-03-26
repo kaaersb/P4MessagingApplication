@@ -124,7 +124,7 @@ function showView(view) {
 async function handleLogin(e) {
     e.preventDefault();
     const username = document.getElementById('lg-username').value.trim();
-    const password = document.getElementById('lg-password').value;
+    const password = document.getElementById('lg-password').value.trim();
     if (!username || !password) return;
 
     setLoading('login', true);
