@@ -168,7 +168,7 @@ async function handleLogin(e) {
 async function handleRegister(e) {
     e.preventDefault();
     const username = document.getElementById('rg-username').value.trim();
-    const email    = document.getElementById('rg-email').value.trim();
+    const email = document.getElementById('rg-email').value.trim();
     const password = document.getElementById('rg-password').value;
     if (!username || !email || !password) return;
 
@@ -214,6 +214,12 @@ function handleLogout() {
     state.messages = [];
     state.friends = [];
     state.pendingRequests = [];
+
+    // Reset the chat window after logging out >:))
+    document.getElementById('active-chat').style.display = 'none';
+    document.getElementById('active-chat').classList.add('hidden');
+    document.getElementById('chat-empty').classList.remove('hidden');
+    if (state.infoPanelOpen) toggleInfoPanel();
 
     document.getElementById('app-screen').classList.add('hidden');
     document.getElementById('auth-screen').classList.remove('hidden');
@@ -324,7 +330,7 @@ function handleServerPush(payload) {
             const msg = payload.message;
             // Check whether this message belongs to the currently visible conversation.
             const isActiveConvo =
-                (msg.sender_id   === state.activeFriendId) ||
+                (msg.sender_id === state.activeFriendId) ||
                 (msg.recipient_id === state.activeFriendId);
 
             if (isActiveConvo) {
@@ -340,12 +346,12 @@ function handleServerPush(payload) {
         }
 
         case 'message_edited': {
-            const { message_id, new_content } = payload;
+            const {message_id, new_content} = payload;
             // Sync in-memory state so any subsequent full re-render is correct.
             const m = state.messages.find(m => m.id === message_id);
             if (m) {
-                m.content    = new_content;
-                m.is_edited  = true;
+                m.content = new_content;
+                m.is_edited = true;
             }
             // Patch the bubble in-place — no full re-render
             patchBubbleContent(message_id, new_content, true);
@@ -353,7 +359,7 @@ function handleServerPush(payload) {
         }
 
         case 'message_deleted': {
-            const { message_id } = payload;
+            const {message_id} = payload;
             state.messages = state.messages.filter(m => m.id !== message_id);
             const row = document.querySelector(`[data-msg-id="${message_id}"]`);
             if (row) row.remove();
@@ -361,7 +367,7 @@ function handleServerPush(payload) {
         }
 
         case 'message_read': {
-            const { message_id } = payload;
+            const {message_id} = payload;
             // Keep in-memory state consistent with the DOM update below.
             const m = state.messages.find(m => m.id === message_id);
             if (m) m.is_read = true;
@@ -451,7 +457,7 @@ async function loadPendingRequests(silent = false) {
         const count = state.pendingRequests.length;
         const badge = document.getElementById('req-count-badge');
         badge.style.display = count > 0 ? 'inline' : 'none';
-        badge.textContent   = count > 0 ? ` (${count})` : '';
+        badge.textContent = count > 0 ? ` (${count})` : '';
         if (state.currentTab === 'requests') renderContactList();
     } catch (err) {
         if (!silent) toast('Failed to load requests', 'error');
@@ -563,7 +569,7 @@ function handleContactSearch(val) {
 // CONVERSATION
 // =============================================================================
 async function openConversation(friend) {
-    state.activeFriendId    = friend.id;
+    state.activeFriendId = friend.id;
     state.activeFriendshipId = friend.friendship_id;
 
     // Re-render the contact list so the newly active item gets its highlight.
@@ -571,16 +577,19 @@ async function openConversation(friend) {
 
     // Populate the chat header and info panel with this friend's details.
     document.getElementById('chat-header-avatar').textContent = initials(friend.username);
-    document.getElementById('chat-header-name').textContent   = friend.username;
-    document.getElementById('info-avatar').textContent        = initials(friend.username);
-    document.getElementById('info-name').textContent          = friend.username;
-    document.getElementById('info-email').textContent         = '';
+    document.getElementById('chat-header-name').textContent = friend.username;
+    document.getElementById('info-avatar').textContent = initials(friend.username);
+    document.getElementById('info-name').textContent = friend.username;
+    document.getElementById('info-email').textContent = '';
 
     // Fetch the full user record in the background to fill in the email field.
     // We don't await this — the rest of the conversation can load immediately.
     api.get(`/users/${friend.id}`)
-        .then(u => { document.getElementById('info-email').textContent = u.email || ''; })
-        .catch(() => {});
+        .then(u => {
+            document.getElementById('info-email').textContent = u.email || '';
+        })
+        .catch(() => {
+        });
 
     document.getElementById('chat-empty').classList.add('hidden');
     const activeChat = document.getElementById('active-chat');
@@ -756,8 +765,8 @@ function makeDateDivider(dateText) {
 // Incoming messages get an avatar on the left.
 function createMsgElement(msg) {
     const isSelf = msg.sender_id === state.currentUser.id;
-    const row    = document.createElement('div');
-    row.className    = `msg-row${isSelf ? ' self' : ''}`;
+    const row = document.createElement('div');
+    row.className = `msg-row${isSelf ? ' self' : ''}`;
     row.dataset.msgId = msg.id;
 
     const friend = state.friends.find(f => f.id === msg.sender_id);
@@ -797,7 +806,7 @@ function createMsgElement(msg) {
 // SEND MESSAGE
 // =============================================================================
 async function sendMessage() {
-    const input   = document.getElementById('chat-input');
+    const input = document.getElementById('chat-input');
     const content = input.value.trim();
     if (!content || !state.activeFriendId) return;
 
@@ -809,7 +818,7 @@ async function sendMessage() {
 
     try {
         await api.post('/send-message', {
-            sender_id:    state.currentUser.id,
+            sender_id: state.currentUser.id,
             recipient_id: state.activeFriendId,
             content,
         });
@@ -872,7 +881,7 @@ function startEdit(msgId) {
     // Position the cursor at the end of the existing text for a natural feel.
     inp.setSelectionRange(inp.value.length, inp.value.length);
     inp.onkeydown = (e) => {
-        if (e.key === 'Enter')  confirmEdit(msgId);
+        if (e.key === 'Enter') confirmEdit(msgId);
         if (e.key === 'Escape') renderMessages();
     };
 }
@@ -888,7 +897,10 @@ async function confirmEdit(msgId) {
         // update the DOM directly as a fallback.
         if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
             const m = state.messages.find(m => m.id === msgId);
-            if (m) { m.content = newContent; m.is_edited = true; }
+            if (m) {
+                m.content = newContent;
+                m.is_edited = true;
+            }
             patchBubbleContent(msgId, newContent, true);
         }
     } catch (err) {
@@ -999,18 +1011,18 @@ async function handleModalSearch(val) {
 
 async function sendFriendRequest(receiverId, btn) {
     // Disable the button immediately to prevent duplicate requests.
-    btn.disabled    = true;
+    btn.disabled = true;
     btn.textContent = 'Sending…';
     try {
         await api.post('/friend-request', {
             requester_id: state.currentUser.id,
-            receiver_id:  receiverId,
+            receiver_id: receiverId,
         });
         btn.textContent = 'Sent ✓';
         btn.classList.replace('btn-primary', 'btn-ghost');
         toast('Friend request sent!', 'success');
     } catch (err) {
-        btn.disabled    = false;
+        btn.disabled = false;
         btn.textContent = 'Add';
         toast(err.message, 'error');
     }
