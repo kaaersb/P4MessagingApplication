@@ -1,15 +1,18 @@
 // =============================================================================
 // STATE
 // =============================================================================
+// Central application state. Mutated in-place throughout the app.
+// ws, wsReconnectTimer, and heartbeatInterval are managed together — always
+// clean them up via disconnectWebSocket() rather than touching them directly.
 const state = {
-    currentUser: null,       // { id, username }
+    currentUser: null,       // { id, username } — set on login, cleared on logout
     friends: [],
     pendingRequests: [],
-    activeFriendId: null,
-    activeFriendshipId: null,
-    messages: [],
+    activeFriendId: null,        // the friend whose conversation is currently open
+    activeFriendshipId: null,    // used by block/unfriend endpoints
+    messages: [],                // messages for the active conversation only
     infoPanelOpen: false,
-    currentTab: 'friends',
+    currentTab: 'friends',       // 'friends' | 'requests'
     ws: null,
     wsReconnectTimer: null,
     heartbeatInterval: null,
@@ -20,6 +23,10 @@ const state = {
 // =============================================================================
 // API HELPERS
 // =============================================================================
+// Thin wrappers around fetch that:
+//   1. Automatically serialise/parse JSON.
+//   2. Throw an Error (with the server's detail message) on non-2xx responses,
+//      so callers can use a simple try/catch rather than checking r.ok themselves.
 const api = {
     async post(url, body) {
         const r = await fetch(url, {
@@ -50,6 +57,8 @@ const api = {
     async delete(url, body) {
         const r = await fetch(url, {
             method: 'DELETE',
+            // Only set Content-Type when there is a body; DELETE requests
+            // without a body should not advertise JSON to avoid CORS preflight.
             headers: body ? {'Content-Type': 'application/json'} : {},
             body: body ? JSON.stringify(body) : undefined,
         });
@@ -63,11 +72,15 @@ const api = {
 // =============================================================================
 // TOAST
 // =============================================================================
+// Appends a self-removing notification to #toast-container.
+// `type` maps to a CSS class: 'info' | 'success' | 'error'.
 function toast(msg, type = 'info') {
     const el = document.createElement('div');
     el.className = `toast ${type}`;
     el.textContent = msg;
     document.getElementById('toast-container').appendChild(el);
+    // Add a CSS fade-out class shortly before removing the element so the
+    // transition plays fully before the node disappears from the DOM.
     setTimeout(() => {
         el.classList.add('fade-out');
         setTimeout(() => el.remove(), 300);
@@ -78,16 +91,20 @@ function toast(msg, type = 'info') {
 // =============================================================================
 // UTILITIES
 // =============================================================================
+// Returns the first two characters of a name in uppercase, used for avatar
+// placeholder text when no profile picture is available.
 function initials(name) {
     return name ? name.slice(0, 2).toUpperCase() : '??';
 }
 
+// Short HH:MM time string for message timestamps inside the chat view.
 function fmtTime(iso) {
     if (!iso) return '';
     const d = new Date(iso);
     return d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
 }
 
+// Groups messages into sections by day ("Today", "Yesterday", or a short date).
 function fmtDate(iso) {
     if (!iso) return '';
     const d = new Date(iso);
@@ -98,6 +115,10 @@ function fmtDate(iso) {
     return d.toLocaleDateString([], {month: 'short', day: 'numeric'});
 }
 
+// Compact timestamp for the contact list sidebar preview:
+//   - Same day    → HH:MM
+//   - This week   → weekday abbreviation (Mon, Tue…)
+//   - Older       → short date (Jan 5)
 function fmtPreviewTime(iso) {
     if (!iso) return '';
     const d = new Date(iso);
@@ -114,6 +135,8 @@ function fmtPreviewTime(iso) {
 // =============================================================================
 // AUTH FLOW
 // =============================================================================
+// Toggles visibility between the three pre-rendered auth screens
+// (welcome / login / register) without any page navigation.
 function showView(view) {
     ['welcome-view', 'login-view', 'register-view'].forEach(id => {
         const el = document.getElementById(id);
@@ -134,6 +157,8 @@ async function handleLogin(e) {
         enterApp();
         toast(`Welcome back, ${data.username}!`, 'success');
     } catch (err) {
+        // Surface the server's validation message inline rather than as a toast
+        // so the user can see which field is at fault without dismissing a popup.
         showFieldError('lg-username-group', 'lg-username-error', err.message);
     } finally {
         setLoading('login', false);
@@ -151,6 +176,7 @@ async function handleRegister(e) {
     try {
         await api.post('/register', {username, email, password});
         toast('Account created! Please sign in.', 'success');
+        // Pre-fill the username field so the user doesn't have to retype it.
         showView('login');
         document.getElementById('lg-username').value = username;
     } catch (err) {
@@ -160,12 +186,16 @@ async function handleRegister(e) {
     }
 }
 
+// Swaps the button label for a spinner while a request is in flight to give
+// the user immediate feedback and prevent accidental double-submission.
 function setLoading(form, loading) {
     document.getElementById(`${form}-btn-text`).classList.toggle('hidden', loading);
     document.getElementById(`${form}-btn-spinner`).classList.toggle('hidden', !loading);
     document.getElementById(`${form}-btn`).disabled = loading;
 }
 
+// Adds an error class to the input group (triggers red border via CSS) and
+// shows an inline message below it, then removes both after 4 seconds.
 function showFieldError(groupId, errorId, msg) {
     document.getElementById(groupId).classList.add('has-error');
     document.getElementById(errorId).textContent = msg;
@@ -173,6 +203,8 @@ function showFieldError(groupId, errorId, msg) {
 }
 
 function handleLogout() {
+    // Tear down real-time connections before clearing state so no stale
+    // push events can arrive after we've nuked the user session.
     disconnectWebSocket();
     stopFallbackPoll();
 
@@ -193,17 +225,20 @@ function handleLogout() {
 // =============================================================================
 // APPLICATION ENTRY
 // =============================================================================
+// Called once the user has successfully authenticated. Sets up the UI,
+// bootstraps data, and opens the WebSocket channel.
 function enterApp() {
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('app-screen').classList.remove('hidden');
 
+    // Render the current user's initials in the nav avatar slot.
     const navAvatarWrap = document.getElementById('nav-user-avatar');
     navAvatarWrap.innerHTML = `<div class="avatar size-sm online" title="${state.currentUser.username}">${initials(state.currentUser.username)}</div>`;
 
     loadFriends();
     loadPendingRequests();
     connectWebSocket();
-    startFallbackPoll();
+    startFallbackPoll(); // belt-and-suspenders polling in case WS drops
 }
 
 
@@ -216,6 +251,7 @@ function enterApp() {
  * Handles heartbeats and automatic reconnection on unexpected close.
  */
 function connectWebSocket() {
+    // Always clean up any existing connection first to avoid duplicate sockets.
     disconnectWebSocket();
 
     const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -254,12 +290,15 @@ function connectWebSocket() {
         // or if there is no longer a logged-in user.
         if (!state.currentUser || event.code === 1000) return;
 
-        // Exponential-ish back-off capped at 5 s
+        // Exponential-ish back-off capped at 5 s to avoid hammering the server.
         const delay = Math.min(5000, 1000 + Math.random() * 2000);
         state.wsReconnectTimer = setTimeout(connectWebSocket, delay);
     };
 }
 
+// Tears down the WebSocket and all associated timers cleanly.
+// Nulling out ws.onclose before calling ws.close() prevents the auto-reconnect
+// logic from firing during an intentional disconnect (e.g. logout).
 function disconnectWebSocket() {
     clearTimeout(state.wsReconnectTimer);
     clearInterval(state.heartbeatInterval);
@@ -275,12 +314,15 @@ function disconnectWebSocket() {
 
 /**
  * Dispatch incoming server-push events to the right handler.
+ * Each case is intentionally surgical — only the minimum DOM is touched
+ * so there is no flicker or scroll-position loss during live updates.
  */
 function handleServerPush(payload) {
     switch (payload.type) {
 
         case 'new_message': {
             const msg = payload.message;
+            // Check whether this message belongs to the currently visible conversation.
             const isActiveConvo =
                 (msg.sender_id   === state.activeFriendId) ||
                 (msg.recipient_id === state.activeFriendId);
@@ -292,14 +334,14 @@ function handleServerPush(payload) {
                 markConversationRead();
             }
 
-            // Refresh sidebar preview & unread badge
+            // Refresh sidebar preview & unread badge regardless of active chat.
             loadFriends(true);
             break;
         }
 
         case 'message_edited': {
             const { message_id, new_content } = payload;
-            // Update in state
+            // Sync in-memory state so any subsequent full re-render is correct.
             const m = state.messages.find(m => m.id === message_id);
             if (m) {
                 m.content    = new_content;
@@ -320,6 +362,7 @@ function handleServerPush(payload) {
 
         case 'message_read': {
             const { message_id } = payload;
+            // Keep in-memory state consistent with the DOM update below.
             const m = state.messages.find(m => m.id === message_id);
             if (m) m.is_read = true;
             markMessageReadInDOM(message_id);
@@ -327,10 +370,12 @@ function handleServerPush(payload) {
         }
 
         case 'friend_request':
+            // A new request arrived — just refresh the count badge and list.
             loadPendingRequests(true);
             break;
 
         case 'friend_accepted':
+            // Both lists change: the accepted user joins friends, request is gone.
             loadFriends(true);
             loadPendingRequests(true);
             break;
@@ -348,6 +393,10 @@ function handleServerPush(payload) {
 /**
  * Keep the sidebar friend list / request count roughly in sync even if the
  * WebSocket connection drops momentarily. Runs every 30 s (silent).
+ *
+ * This intentionally does NOT re-render the message thread — that would cause
+ * a visible flicker. WebSocket handles all message-level real-time updates;
+ * this poll is only a safety net for the sidebar.
  */
 function startFallbackPoll() {
     stopFallbackPoll();
@@ -380,6 +429,10 @@ function switchTab(tab) {
 // =============================================================================
 // FRIENDS & REQUESTS
 // =============================================================================
+
+// `silent = true` suppresses the error toast — used by background refreshes
+// (WebSocket events, fallback poll) where a transient failure shouldn't
+// interrupt the user.
 async function loadFriends(silent = false) {
     try {
         const data = await api.get(`/friends/${state.currentUser.id}`);
@@ -405,6 +458,8 @@ async function loadPendingRequests(silent = false) {
     }
 }
 
+// Aggregates all per-friend unread counts and reflects the total in the
+// global nav badge (shown as "99+" when the number is very large).
 function updateUnreadBadge() {
     const total = state.friends.reduce((sum, f) => sum + (f.unread_count || 0), 0);
     const badge = document.getElementById('nav-unread-badge');
@@ -420,6 +475,9 @@ function updateUnreadBadge() {
 // =============================================================================
 // CONTACT LIST RENDERING
 // =============================================================================
+
+// Full sidebar re-render. Called after data loads or the active tab changes.
+// Uses an optional `searchQuery` to filter the friends list client-side.
 function renderContactList(searchQuery = '') {
     const list = document.getElementById('contact-list');
     list.innerHTML = '';
@@ -495,6 +553,7 @@ function renderRequestsList(list) {
     });
 }
 
+// Called on every keystroke in the search box; re-renders with the current value.
 function handleContactSearch(val) {
     renderContactList(val.trim());
 }
@@ -507,14 +566,18 @@ async function openConversation(friend) {
     state.activeFriendId    = friend.id;
     state.activeFriendshipId = friend.friendship_id;
 
+    // Re-render the contact list so the newly active item gets its highlight.
     renderContactList(document.getElementById('contact-search').value);
 
+    // Populate the chat header and info panel with this friend's details.
     document.getElementById('chat-header-avatar').textContent = initials(friend.username);
     document.getElementById('chat-header-name').textContent   = friend.username;
     document.getElementById('info-avatar').textContent        = initials(friend.username);
     document.getElementById('info-name').textContent          = friend.username;
     document.getElementById('info-email').textContent         = '';
 
+    // Fetch the full user record in the background to fill in the email field.
+    // We don't await this — the rest of the conversation can load immediately.
     api.get(`/users/${friend.id}`)
         .then(u => { document.getElementById('info-email').textContent = u.email || ''; })
         .catch(() => {});
@@ -524,9 +587,10 @@ async function openConversation(friend) {
     activeChat.classList.remove('hidden');
     activeChat.style.display = 'flex';
 
+    // On mobile, close the sidebar overlay so the chat is fully visible.
     closeSidebar();
 
-    // Full load on conversation open — clears old messages and fetches fresh
+    // Full load on conversation open — clears old messages and fetches fresh.
     await loadMessages();
 
     document.getElementById('chat-input').focus();
@@ -548,6 +612,8 @@ async function loadMessages(silent = false) {
         const data = await api.get(`/messages/${state.currentUser.id}/${state.activeFriendId}`);
         state.messages = data.messages || [];
         renderMessages();
+        // Refreshing the friend list here clears the unread badge for this
+        // conversation, since the server marks messages as read on GET /messages.
         if (!silent) loadFriends(true);
     } catch (err) {
         if (!silent) toast('Failed to load messages', 'error');
@@ -557,6 +623,9 @@ async function loadMessages(silent = false) {
 /**
  * Full re-render — only called when opening a conversation or after an edit/
  * delete that requires layout recalculation.  NOT called during live updates.
+ *
+ * Inserts date dividers whenever the calendar day changes between consecutive
+ * messages, then scrolls to the bottom.
  */
 function renderMessages() {
     const container = document.getElementById('messages-container');
@@ -589,12 +658,15 @@ function renderMessages() {
 /**
  * Append a single new message node without touching existing DOM.
  * This is what the WebSocket push calls — no flicker, no scroll jump.
+ *
+ * Only auto-scrolls to the new message if the user was already near the bottom
+ * (within 100px). This way a user reading old messages isn't jumped away.
  */
 function appendMessage(msg) {
     const container = document.getElementById('messages-container');
     if (!container) return;
 
-    // Guard: message already rendered
+    // Guard: message already rendered (can happen if WS and fallback race)
     if (container.querySelector(`[data-msg-id="${msg.id}"]`)) return;
 
     // Remove "Start the conversation!" placeholder if present
@@ -611,7 +683,6 @@ function appendMessage(msg) {
         container.appendChild(makeDateDivider(msgDate));
     }
 
-    // Remember scroll position — only auto-scroll if already near bottom
     const isNearBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight < 100;
 
@@ -623,22 +694,20 @@ function appendMessage(msg) {
 
 /**
  * Patch just the text content of an existing bubble after an edit.
- * Avoids a full re-render for a single edit.
+ * Avoids a full re-render for a single edit to prevent scroll-position loss.
  */
 function patchBubbleContent(msgId, newContent, isEdited) {
     const bubble = document.getElementById(`bubble-${msgId}`);
     if (!bubble) return;
 
-    // Preserve the action buttons (edit/delete) which are children of the bubble
-    const actions = bubble.querySelector('.bubble-actions');
-
-    // Set the text node directly
+    // Remove existing text nodes while leaving the action buttons (edit/delete)
+    // in place — they are child elements, not text nodes, so this is safe.
     bubble.childNodes.forEach(node => {
         if (node.nodeType === Node.TEXT_NODE) node.remove();
     });
     bubble.insertBefore(document.createTextNode(newContent), bubble.firstChild);
 
-    // Update "edited" label in the meta row
+    // Add an "edited" label to the meta row if it isn't already there.
     const metaRow = bubble.closest('.msg-body')?.querySelector('.bubble-meta');
     if (metaRow && isEdited && !metaRow.querySelector('.bubble-edited')) {
         const editedSpan = document.createElement('span');
@@ -650,6 +719,7 @@ function patchBubbleContent(msgId, newContent, isEdited) {
 
 /**
  * Add a blue-tick read indicator to a message bubble without re-rendering.
+ * Called when the server pushes a `message_read` event.
  */
 function markMessageReadInDOM(msgId) {
     const row = document.querySelector(`[data-msg-id="${msgId}"]`);
@@ -665,11 +735,10 @@ function markMessageReadInDOM(msgId) {
 
 /**
  * Tell the server the current conversation has been read (fire-and-forget).
- * The server will push a message_read event back to the other party.
+ * The server marks messages as read when GET /messages is called, so we only
+ * need to refresh the friend list here to clear the sidebar unread badge.
  */
 async function markConversationRead() {
-    // The server already marks messages as read when GET /messages is called,
-    // so we just need to refresh the friend list to clear the badge.
     await loadFriends(true);
 }
 
@@ -682,6 +751,9 @@ function makeDateDivider(dateText) {
     return divider;
 }
 
+// Builds a single message row element from a message object.
+// Outgoing messages (isSelf) get edit/delete action buttons and read ticks.
+// Incoming messages get an avatar on the left.
 function createMsgElement(msg) {
     const isSelf = msg.sender_id === state.currentUser.id;
     const row    = document.createElement('div');
@@ -729,6 +801,8 @@ async function sendMessage() {
     const content = input.value.trim();
     if (!content || !state.activeFriendId) return;
 
+    // Clear the input immediately for snappy UX — the server response will
+    // push the confirmed message back via WebSocket.
     input.value = '';
     input.style.height = 'auto';
     document.getElementById('send-btn').disabled = true;
@@ -739,18 +813,21 @@ async function sendMessage() {
             recipient_id: state.activeFriendId,
             content,
         });
-        // The server will push the new message back via WebSocket so we
-        // don't need to call loadMessages() here — appendMessage() will fire.
-        // However, if WS is temporarily down we fall back to a manual append.
+        // The server pushes the new message back via WebSocket, so appendMessage()
+        // fires automatically. If the WS is temporarily down we fall back to a
+        // full reload to ensure the message appears.
         if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
             await loadMessages(true);
         }
     } catch (err) {
         toast(err.message, 'error');
+        // Restore the draft so the user doesn't lose what they typed.
         input.value = content;
     }
 }
 
+// Handles Enter-to-send (Shift+Enter inserts a newline instead) and keeps
+// the send button in sync with whether the input has non-whitespace content.
 function handleInputKeydown(e) {
     const btn = document.getElementById('send-btn');
     btn.disabled = !e.target.value.trim();
@@ -760,6 +837,8 @@ function handleInputKeydown(e) {
     }
 }
 
+// Grows the textarea as the user types (capped at 140px) to avoid a fixed
+// single-line box that hides long messages. Also syncs the send button state.
 function autoResizeInput(el) {
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 140) + 'px';
@@ -770,6 +849,10 @@ function autoResizeInput(el) {
 // =============================================================================
 // EDIT & DELETE MESSAGES
 // =============================================================================
+
+// Replaces the bubble's text content with an inline edit form.
+// Pressing Enter or clicking ✓ commits; Escape or ✕ calls renderMessages()
+// to restore the original bubble from in-memory state.
 function startEdit(msgId) {
     const msg = state.messages.find(m => m.id === msgId);
     if (!msg) return;
@@ -786,6 +869,7 @@ function startEdit(msgId) {
 
     const inp = document.getElementById(`edit-input-${msgId}`);
     inp.focus();
+    // Position the cursor at the end of the existing text for a natural feel.
     inp.setSelectionRange(inp.value.length, inp.value.length);
     inp.onkeydown = (e) => {
         if (e.key === 'Enter')  confirmEdit(msgId);
@@ -800,7 +884,8 @@ async function confirmEdit(msgId) {
     try {
         await api.put(`/messages/${msgId}`, {user_id: state.currentUser.id, new_content: newContent});
         toast('Message edited', 'success');
-        // Server will push message_edited via WS; if WS is down, fall back:
+        // The server will push a `message_edited` WS event; if WS is down,
+        // update the DOM directly as a fallback.
         if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
             const m = state.messages.find(m => m.id === msgId);
             if (m) { m.content = newContent; m.is_edited = true; }
@@ -808,6 +893,7 @@ async function confirmEdit(msgId) {
         }
     } catch (err) {
         toast(err.message, 'error');
+        // On error, revert the edit form back to a normal bubble.
         renderMessages();
     }
 }
@@ -817,7 +903,7 @@ async function deleteMessage(msgId) {
         await api.delete(`/messages/${msgId}?user_id=${state.currentUser.id}`);
         toast('Message deleted', 'info');
         state.messages = state.messages.filter(m => m.id !== msgId);
-        // Remove node directly — no full re-render needed
+        // Remove the DOM node directly — no full re-render needed.
         const row = document.querySelector(`[data-msg-id="${msgId}"]`);
         if (row) row.remove();
     } catch (err) {
@@ -840,6 +926,7 @@ async function respondToRequest(requestId, action) {
             action === 'accept' ? 'Friend request accepted!' : 'Request declined.',
             action === 'accept' ? 'success' : 'info'
         );
+        // Reload both lists: the accepted user moves from requests to friends.
         await loadPendingRequests();
         await loadFriends();
     } catch (err) {
@@ -865,6 +952,7 @@ function closeAddFriendModal() {
     document.getElementById('add-friend-modal').classList.add('hidden');
 }
 
+// Debounced search so we don't fire an API request on every single keystroke.
 let modalSearchTimer;
 
 async function handleModalSearch(val) {
@@ -875,9 +963,11 @@ async function handleModalSearch(val) {
         return;
     }
     results.innerHTML = `<div style="display:flex;justify-content:center;padding:20px;"><div class="spinner"></div></div>`;
+    // Wait 300 ms after the last keystroke before sending the request.
     modalSearchTimer = setTimeout(async () => {
         try {
             const data = await api.get(`/users/search?query=${encodeURIComponent(val)}`);
+            // Filter out the current user from results — you can't add yourself.
             const users = (data.users || []).filter(u => u.id !== state.currentUser.id);
             if (users.length === 0) {
                 results.innerHTML = `<p style="color:var(--clr-text-muted);font-size:13px;text-align:center;padding:24px 0;">No users found</p>`;
@@ -895,6 +985,7 @@ async function handleModalSearch(val) {
             <div class="contact-preview">${user.email || ''}</div>
           </div>
           ${isFriend
+                    // Already friends — show a disabled label instead of an Add button.
                     ? `<span class="btn btn-ghost" style="font-size:11px;padding:6px 12px;cursor:default;opacity:.6;">Friends</span>`
                     : `<button class="btn btn-primary" onclick="sendFriendRequest(${user.id}, this)" style="font-size:12px;padding:6px 14px;">Add</button>`
                 }`;
@@ -907,6 +998,7 @@ async function handleModalSearch(val) {
 }
 
 async function sendFriendRequest(receiverId, btn) {
+    // Disable the button immediately to prevent duplicate requests.
     btn.disabled    = true;
     btn.textContent = 'Sending…';
     try {
@@ -928,6 +1020,7 @@ async function sendFriendRequest(receiverId, btn) {
 // =============================================================================
 // INFO PANEL
 // =============================================================================
+// Toggles the slide-in contact detail panel on the right edge of the chat.
 function toggleInfoPanel() {
     state.infoPanelOpen = !state.infoPanelOpen;
     document.getElementById('info-panel').classList.toggle('open', state.infoPanelOpen);
@@ -947,6 +1040,7 @@ async function handleBlock() {
             blocked_id: state.activeFriendId,
         });
         toast(`${name} has been blocked.`, 'info');
+        // Return to the empty-chat placeholder and close the info panel.
         state.activeFriendId = null;
         document.getElementById('active-chat').style.display = 'none';
         document.getElementById('active-chat').classList.add('hidden');
@@ -978,8 +1072,10 @@ function closeSidebar() {
 // =============================================================================
 // EVENT LISTENERS
 // =============================================================================
+// Tapping the dim overlay behind the sidebar closes it (mobile UX pattern).
 document.getElementById('sidebar-overlay').addEventListener('click', closeSidebar);
 
+// Clicking outside the modal card (directly on the backdrop) closes the modal.
 document.getElementById('add-friend-modal').addEventListener('click', function (e) {
     if (e.target === this) closeAddFriendModal();
 });
