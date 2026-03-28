@@ -215,12 +215,6 @@ function handleLogout() {
     state.friends = [];
     state.pendingRequests = [];
 
-    // Reset the chat window after logging out >:))
-    document.getElementById('active-chat').style.display = 'none';
-    document.getElementById('active-chat').classList.add('hidden');
-    document.getElementById('chat-empty').classList.remove('hidden');
-    if (state.infoPanelOpen) toggleInfoPanel();
-
     document.getElementById('app-screen').classList.add('hidden');
     document.getElementById('auth-screen').classList.remove('hidden');
     showView('welcome');
