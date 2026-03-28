@@ -215,6 +215,27 @@ function handleLogout() {
     state.friends = [];
     state.pendingRequests = [];
 
+    // ── Reset chat area to its blank initial state ──
+    const activeChat = document.getElementById('active-chat');
+    activeChat.classList.add('hidden');
+    activeChat.style.display = 'none';
+    document.getElementById('chat-empty').classList.remove('hidden');
+    document.getElementById('messages-container').innerHTML = '';
+
+    // ── Reset sidebar ──
+    document.getElementById('contact-list').innerHTML = '';
+    document.getElementById('contact-search').value = '';
+    const badge = document.getElementById('req-count-badge');
+    badge.style.display = 'none';
+    badge.textContent = '';
+    document.getElementById('nav-unread-badge').classList.add('hidden');
+
+    // ── Close info panel if open ──
+    if (state.infoPanelOpen) {
+        state.infoPanelOpen = false;
+        document.getElementById('info-panel').classList.remove('open');
+    }
+
     document.getElementById('app-screen').classList.add('hidden');
     document.getElementById('auth-screen').classList.remove('hidden');
     showView('welcome');
