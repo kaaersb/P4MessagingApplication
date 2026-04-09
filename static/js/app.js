@@ -260,6 +260,10 @@ function enterApp() {
     loadPendingRequests();
     connectWebSocket();
     startFallbackPoll(); // belt-and-suspenders polling in case WS drops
+
+    // Request permission for browser notifications when the user enters
+    // the app so we can display notifications for incoming messages.
+    requestNotificationPermission();
 }
 
 
@@ -292,6 +296,7 @@ function connectWebSocket() {
         if (event.data === 'pong') return; // heartbeat reply — ignore
         try {
             const payload = JSON.parse(event.data);
+            console.debug('[WS] received payload', payload);
             handleServerPush(payload);
         } catch (err) {
             console.warn('[WS] Could not parse message:', event.data);
@@ -333,6 +338,88 @@ function disconnectWebSocket() {
     }
 }
 
+
+// =============================================================================
+// BROWSER NOTIFICATIONS
+// =============================================================================
+
+// Ask the user for permission to show notifications. Safe to call multiple
+// times; the browser will only prompt on the first request.
+function requestNotificationPermission() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+            console.debug('[NOTIF] permission', permission);
+        });
+    }
+}
+
+// Open a conversation by friend id. If the friend isn't present in state.friends
+// we reload the list and then open it.
+async function openConversationById(friendId) {
+    let friend = state.friends.find(f => Number(f.id) === Number(friendId));
+    if (!friend) {
+        try {
+            await loadFriends(true);
+            friend = state.friends.find(f => Number(f.id) === Number(friendId));
+        } catch (e) {
+            // ignore
+        }
+    }
+    if (friend) openConversation(friend);
+}
+
+// Display a browser notification for certain server-push payloads.
+function showBrowserNotification(payload) {
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+    if (!state.currentUser) return;
+
+    let title = 'Notification';
+    let body = '';
+    let tag = undefined;
+    let clickTargetId = null;
+
+    switch (payload.type) {
+        case 'new_message': {
+            const msg = payload.message || {};
+            const senderId = Number(msg.sender_id);
+            const sender = state.friends.find(f => Number(f.id) === senderId);
+            const senderName = sender ? sender.username : 'Someone';
+            title = senderName;
+            body = msg.content || 'Sent you a message';
+            tag = `msg-${msg.id}`;
+            clickTargetId = senderId;
+
+            // Only notify if the user isn't actively viewing that conversation
+            if (Number(state.activeFriendId) === senderId && !document.hidden) return;
+            break;
+        }
+        case 'friend_request': {
+            title = 'Friend request';
+            body = 'You have a new friend request';
+            tag = 'friend-request';
+            break;
+        }
+        case 'friend_accepted': {
+            title = 'Friend added';
+            body = 'A friend request was accepted';
+            tag = 'friend-accepted';
+            break;
+        }
+        default:
+            return;
+    }
+
+    const n = new Notification(title, {body, tag});
+    n.onclick = (ev) => {
+        ev.preventDefault();
+        window.focus();
+        if (clickTargetId) openConversationById(clickTargetId);
+        n.close();
+    };
+}
+
 /**
  * Dispatch incoming server-push events to the right handler.
  * Each case is intentionally surgical — only the minimum DOM is touched
@@ -343,13 +430,16 @@ function handleServerPush(payload) {
 
         case 'new_message': {
             const msg = payload.message;
+            // Coerce IDs to numbers to avoid mismatches from stringified JSON
+            const senderId = Number(msg.sender_id);
+            const recipientId = Number(msg.recipient_id);
+            const activeId = Number(state.activeFriendId);
+
             // Check whether this message belongs to the currently visible conversation.
-            const isActiveConvo =
-                (msg.sender_id === state.activeFriendId) ||
-                (msg.recipient_id === state.activeFriendId);
+            const isActiveConvo = (senderId === activeId) || (recipientId === activeId);
 
             if (isActiveConvo) {
-                // Append without touching existing DOM nodes
+                // Append without touching existing DOM
                 appendMessage(msg);
                 // Mark as read immediately since the chat is open
                 markConversationRead();
@@ -357,6 +447,9 @@ function handleServerPush(payload) {
 
             // Refresh sidebar preview & unread badge regardless of active chat.
             loadFriends(true);
+            // Show a browser notification when the user isn't actively viewing
+            // the conversation or the page is hidden.
+            try { showBrowserNotification(payload); } catch (e) { /* ignore */ }
             break;
         }
 
@@ -393,12 +486,14 @@ function handleServerPush(payload) {
         case 'friend_request':
             // A new request arrived — just refresh the count badge and list.
             loadPendingRequests(true);
+            try { showBrowserNotification(payload); } catch (e) { /* ignore */ }
             break;
 
         case 'friend_accepted':
             // Both lists change: the accepted user joins friends, request is gone.
             loadFriends(true);
             loadPendingRequests(true);
+            try { showBrowserNotification(payload); } catch (e) { /* ignore */ }
             break;
 
         default:
