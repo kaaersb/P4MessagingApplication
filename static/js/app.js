@@ -290,6 +290,8 @@ function connectWebSocket() {
         state.heartbeatInterval = setInterval(() => {
             if (ws.readyState === WebSocket.OPEN) ws.send('ping');
         }, 25000);
+        // Catch up on any messages that arrived while the socket was down.
+        if (state.activeFriendId) loadMessages(true).catch(() => {});
     };
 
     ws.onmessage = (event) => {
@@ -507,20 +509,36 @@ function handleServerPush(payload) {
 // =============================================================================
 
 /**
- * Keep the sidebar friend list / request count roughly in sync even if the
- * WebSocket connection drops momentarily. Runs every 30 s (silent).
- *
- * This intentionally does NOT re-render the message thread — that would cause
- * a visible flicker. WebSocket handles all message-level real-time updates;
- * this poll is only a safety net for the sidebar.
+ * Silently fetch the active conversation and append any messages that aren't
+ * already rendered. This is a no-flicker fallback for when the WebSocket push
+ * is missed (e.g. brief disconnection or proxy not forwarding upgrades).
+ */
+async function silentPollMessages() {
+    if (!state.currentUser || !state.activeFriendId) return;
+    try {
+        const data = await api.get(`/messages/${state.currentUser.id}/${state.activeFriendId}`);
+        const fresh = data.messages || [];
+        const knownIds = new Set(state.messages.map(m => m.id));
+        fresh.filter(m => !knownIds.has(m.id)).forEach(msg => appendMessage(msg));
+    } catch (_) { /* ignore transient errors */ }
+}
+
+/**
+ * Keep the sidebar and active conversation in sync even if the WebSocket
+ * drops momentarily. Message thread is polled every 3 s; sidebar every 30 s.
  */
 function startFallbackPoll() {
     stopFallbackPoll();
+    let tick = 0;
     state.fallbackPollInterval = setInterval(async () => {
         if (!state.currentUser) return;
-        await loadFriends(true);
-        await loadPendingRequests(true);
-    }, 30000);
+        tick++;
+        await silentPollMessages();
+        if (tick % 10 === 0) {
+            await loadFriends(true);
+            await loadPendingRequests(true);
+        }
+    }, 3000);
 }
 
 function stopFallbackPoll() {
