@@ -1,5 +1,5 @@
 # P4 Messaging Application
-
+Wagwan
 A private messaging network built with FastAPI and PostgreSQL. This application allows users to register, find friends through a request system, and engage in private real-time conversations.
 
 ## Features
