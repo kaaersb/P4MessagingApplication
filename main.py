@@ -154,7 +154,7 @@ def register(data: RegisterRequest):
         cursor.close()
         conn.close()
 
-
+'''
 @app.post("/login")
 def login(data: LoginRequest):
     """Login with username and password."""
@@ -167,6 +167,25 @@ def login(data: LoginRequest):
         )
         user = cursor.fetchone()
         if not user or user[2] != data.password:
+            raise HTTPException(status_code=401, detail="Invalid username or password")
+        return {"message": "Login successful", "user_id": user[0], "username": user[1]}
+    finally:
+        cursor.close()
+        conn.close()
+
+'''
+
+# VULNERABLE login endpoint
+@app.post("/login")
+def login(data: LoginRequest):
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        # ❌ VULNERABLE: user input injected directly into the query string
+        query = f"SELECT id, username, password FROM users WHERE username = '{data.username}' AND password = '{data.password}'"
+        cursor.execute(query)
+        user = cursor.fetchone()
+        if not user:
             raise HTTPException(status_code=401, detail="Invalid username or password")
         return {"message": "Login successful", "user_id": user[0], "username": user[1]}
     finally:
@@ -191,7 +210,7 @@ def get_users():
         cursor.close()
         conn.close()
 
-
+'''
 @app.get("/users/search")
 def search_users(query: str):
     """Search for users by username (partial match)."""
@@ -207,7 +226,22 @@ def search_users(query: str):
     finally:
         cursor.close()
         conn.close()
+'''
 
+# VULNERABLE search endpoint
+@app.get("/users/search")
+def search_users(query: str):
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        # ❌ VULNERABLE: query parameter injected directly into SQL
+        sql = f"SELECT id, username, email FROM users WHERE username ILIKE '%{query}%'"
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        return {"users": [{"id": r[0], "username": r[1], "email": r[2]} for r in rows]}
+    finally:
+        cursor.close()
+        conn.close()
 
 @app.get("/users/{user_id}")
 def get_user(user_id: int):
