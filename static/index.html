@@ -8,7 +8,6 @@
     <link href="./styles/base.css" rel="stylesheet"/>
     <link href="./styles/auth.css" rel="stylesheet"/>
     <link href="./styles/app.css" rel="stylesheet"/>
-    <script src="./js/app.js"></script>
 </head>
 <body>
 
@@ -44,7 +43,7 @@
             Elegant, private, and always at your fingertips.
         </p>
         <div class="welcome-actions">
-            <button class="btn btn-primary" onclick="showView('login')">
+            <button class="btn btn-primary" id="btn-show-login">
                 <svg fill="none" height="16" stroke="currentColor" stroke-width="2"
                      viewBox="0 0 24 24" width="16" xmlns="http://www.w3.org/2000/svg">
                     <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
@@ -53,7 +52,7 @@
                 </svg>
                 Sign In
             </button>
-            <button class="btn btn-ghost" onclick="showView('register')">
+            <button class="btn btn-ghost" id="btn-show-register">
                 Create Account
             </button>
         </div>
@@ -67,7 +66,7 @@
 
     <!-- Login Panel -->
     <div class="auth-panel hidden" id="login-view">
-        <a class="auth-panel-back" href="#" onclick="showView('welcome'); return false;">
+        <a class="auth-panel-back" href="#" id="login-back">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
                  xmlns="http://www.w3.org/2000/svg">
                 <polyline points="15 18 9 12 15 6"/>
@@ -78,7 +77,7 @@
             <h2 class="auth-panel-title">Welcome back</h2>
             <p class="auth-panel-subtitle">Sign in to continue your conversations</p>
         </div>
-        <form class="auth-form" id="login-form" onsubmit="handleLogin(event)">
+        <form class="auth-form" id="login-form">
             <div class="form-group" id="lg-username-group">
                 <label class="form-label" for="lg-username">Username</label>
                 <div class="input-with-icon">
@@ -101,7 +100,7 @@
                         <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                     </svg>
                     <input autocomplete="current-password" class="input-field" id="lg-password" placeholder="••••••••"
-                           required type="text"/>
+                           required type="password"/>
                 </div>
                 <span class="form-error" id="lg-password-error"></span>
             </div>
@@ -112,7 +111,7 @@
                 </button>
                 <div class="auth-separator">or</div>
                 <p class="auth-switch">
-                    Don't have an account? <a href="#" onclick="showView('register'); return false;">Create one</a>
+                    Don't have an account? <a href="#" id="login-to-register">Create one</a>
                 </p>
             </div>
         </form>
@@ -120,7 +119,7 @@
 
     <!-- Register Panel -->
     <div class="auth-panel hidden" id="register-view">
-        <a class="auth-panel-back" href="#" onclick="showView('welcome'); return false;">
+        <a class="auth-panel-back" href="#" id="register-back">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
                  xmlns="http://www.w3.org/2000/svg">
                 <polyline points="15 18 9 12 15 6"/>
@@ -131,7 +130,7 @@
             <h2 class="auth-panel-title">Create account</h2>
             <p class="auth-panel-subtitle">Join Aura and start connecting</p>
         </div>
-        <form class="auth-form" id="register-form" onsubmit="handleRegister(event)">
+        <form class="auth-form" id="register-form">
             <div class="form-group" id="rg-username-group">
                 <label class="form-label" for="rg-username">Username</label>
                 <div class="input-with-icon">
@@ -167,7 +166,7 @@
                         <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                     </svg>
                     <input autocomplete="new-password" class="input-field" id="rg-password" placeholder="Create a strong password"
-                           required type="text"/>
+                           required type="password"/>
                 </div>
                 <span class="form-error" id="rg-password-error"></span>
             </div>
@@ -178,7 +177,7 @@
                 </button>
                 <div class="auth-separator">or</div>
                 <p class="auth-switch">
-                    Already have an account? <a href="#" onclick="showView('login'); return false;">Sign in</a>
+                    Already have an account? <a href="#" id="register-to-login">Sign in</a>
                 </p>
             </div>
         </form>
@@ -202,7 +201,7 @@
             <span class="nav-badge hidden" id="nav-unread-badge">0</span>
         </button>
 
-        <button class="nav-btn" onclick="openAddFriendModal()" title="Add Friend">
+        <button class="nav-btn" id="nav-add-friend-btn" title="Add Friend">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
                  xmlns="http://www.w3.org/2000/svg">
                 <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
@@ -216,7 +215,7 @@
 
         <div class="nav-user-avatar" id="nav-user-avatar" title="Your profile"></div>
 
-        <button class="nav-btn" onclick="handleLogout()" title="Sign out">
+        <button class="nav-btn" id="nav-logout-btn" title="Sign out">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
                  xmlns="http://www.w3.org/2000/svg">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -236,15 +235,14 @@
                     <circle cx="11" cy="11" r="8"/>
                     <line x1="21" x2="16.65" y1="21" y2="16.65"/>
                 </svg>
-                <input class="input-field" id="contact-search" oninput="handleContactSearch(this.value)" placeholder="Search friends…"
-                       type="search"/>
+                <input class="input-field" id="contact-search" placeholder="Search friends…" type="search"/>
             </div>
         </div>
 
         <!-- Tabs -->
         <div class="sidebar-tabs">
-            <button class="tab-btn active" id="tab-friends" onclick="switchTab('friends')">Friends</button>
-            <button class="tab-btn" id="tab-requests" onclick="switchTab('requests')">Requests <span
+            <button class="tab-btn active" id="tab-friends">Friends</button>
+            <button class="tab-btn" id="tab-requests">Requests <span
                     id="req-count-badge" style="display:none;"></span></button>
         </div>
 
@@ -256,7 +254,7 @@
     <main class="chat-area" id="chat-area">
         <!-- Mobile Header -->
         <div class="mobile-header" id="mobile-header">
-            <button aria-label="Open menu" class="mobile-menu-btn" onclick="toggleSidebar()">
+            <button aria-label="Open menu" class="mobile-menu-btn" id="mobile-menu-btn">
                 <svg fill="none" height="20" stroke="currentColor" stroke-width="2"
                      viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg">
                     <line x1="3" x2="21" y1="12" y2="12"/>
@@ -265,7 +263,7 @@
                 </svg>
             </button>
             <span class="mobile-header-title">Aura</span>
-            <button aria-label="Add friend" class="mobile-add-btn" onclick="openAddFriendModal()">
+            <button aria-label="Add friend" class="mobile-add-btn" id="mobile-add-btn">
                 <svg fill="none" height="18" stroke="currentColor" stroke-width="2"
                      viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">
                     <line x1="12" x2="12" y1="5" y2="19"/>
@@ -279,7 +277,7 @@
             <div class="chat-empty-icon">✦</div>
             <h3>Pick a conversation</h3>
             <p>Select a friend from the sidebar to start messaging, or add someone new.</p>
-            <button class="btn btn-ghost" onclick="openAddFriendModal()" style="margin-top: 8px;">
+            <button class="btn btn-ghost" id="chat-empty-add-btn" style="margin-top: 8px;">
                 <svg fill="none" height="15" stroke="currentColor" stroke-width="2"
                      viewBox="0 0 24 24" width="15" xmlns="http://www.w3.org/2000/svg">
                     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
@@ -305,7 +303,7 @@
                     </div>
                 </div>
                 <div class="chat-header-actions">
-                    <button class="icon-btn" id="info-toggle-btn" onclick="toggleInfoPanel()" title="View profile">
+                    <button class="icon-btn" id="info-toggle-btn" title="View profile">
                         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
                              xmlns="http://www.w3.org/2000/svg">
                             <circle cx="12" cy="12" r="10"/>
@@ -322,16 +320,14 @@
             <!-- Chat Input -->
             <div class="chat-input-bar">
                 <div class="chat-input-wrap">
-          <textarea
-                  class="chat-input"
-                  id="chat-input"
-                  oninput="autoResizeInput(this)"
-                  onkeydown="handleInputKeydown(event)"
-                  placeholder="Message…"
-                  rows="1"
-          ></textarea>
+                    <textarea
+                            class="chat-input"
+                            id="chat-input"
+                            placeholder="Message…"
+                            rows="1"
+                    ></textarea>
                 </div>
-                <button aria-label="Send message" class="chat-send-btn" disabled id="send-btn" onclick="sendMessage()">
+                <button aria-label="Send message" class="chat-send-btn" disabled id="send-btn">
                     <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"
                          xmlns="http://www.w3.org/2000/svg">
                         <line x1="22" x2="11" y1="2" y2="13"/>
@@ -351,7 +347,7 @@
                 <div class="info-panel-email" id="info-email"></div>
             </div>
             <div class="info-panel-actions">
-                <button class="btn btn-danger" id="block-btn" onclick="handleBlock()">
+                <button class="btn btn-danger" id="block-btn">
                     <svg fill="none" height="14" stroke="currentColor" stroke-width="2"
                          viewBox="0 0 24 24" width="14" xmlns="http://www.w3.org/2000/svg">
                         <circle cx="12" cy="12" r="10"/>
@@ -359,7 +355,7 @@
                     </svg>
                     Block User
                 </button>
-                <button class="btn btn-ghost" onclick="toggleInfoPanel()">Close</button>
+                <button class="btn btn-ghost" id="info-panel-close-btn">Close</button>
             </div>
         </div>
     </div>
@@ -368,7 +364,7 @@
 <!-- ─── Add Friend Modal ──────────────────────────────── -->
 <div class="modal-overlay hidden" id="add-friend-modal">
     <div aria-labelledby="modal-title" aria-modal="true" class="modal" role="dialog">
-        <button aria-label="Close" class="modal-close" onclick="closeAddFriendModal()">
+        <button aria-label="Close" class="modal-close" id="modal-close-btn">
             <svg fill="none" height="16" stroke="currentColor" stroke-width="2"
                  viewBox="0 0 24 24" width="16" xmlns="http://www.w3.org/2000/svg">
                 <line x1="18" x2="6" y1="6" y2="18"/>
@@ -382,7 +378,7 @@
                 <circle cx="11" cy="11" r="8"/>
                 <line x1="21" x2="16.65" y1="21" y2="16.65"/>
             </svg>
-            <input class="input-field" id="modal-search-input" oninput="handleModalSearch(this.value)" placeholder="Search by username…"
+            <input class="input-field" id="modal-search-input" placeholder="Search by username…"
                    style="padding-left:36px;" type="search"/>
         </div>
         <div class="modal-search-results" id="modal-search-results">
@@ -392,5 +388,8 @@
         </div>
     </div>
 </div>
+
+<!-- Script loaded last so DOM is ready; defer ensures non-blocking parse -->
+<script src="./js/app.js" defer></script>
 </body>
 </html>

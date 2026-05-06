@@ -202,11 +202,14 @@ function showFieldError(groupId, errorId, msg) {
     setTimeout(() => document.getElementById(groupId).classList.remove('has-error'), 4000);
 }
 
-function handleLogout() {
+async function handleLogout() {
     // Tear down real-time connections before clearing state so no stale
     // push events can arrive after we've nuked the user session.
     disconnectWebSocket();
     stopFallbackPoll();
+
+    // Invalidate the server-side session and clear the HttpOnly cookie.
+    try { await api.post('/logout', {}); } catch (_) { /* ignore */ }
 
     state.currentUser = null;
     state.activeFriendId = null;
@@ -680,8 +683,8 @@ function renderRequestsList(list) {
         <div class="contact-preview">wants to connect</div>
       </div>
       <div class="request-actions">
-        <button class="req-btn accept" title="Accept" onclick="respondToRequest(${req.request_id},'accept')">✓</button>
-        <button class="req-btn decline" title="Decline" onclick="respondToRequest(${req.request_id},'decline')">✕</button>
+        <button class="req-btn accept" title="Accept" data-action="accept" data-request-id="${req.request_id}">✓</button>
+        <button class="req-btn decline" title="Decline" data-action="decline" data-request-id="${req.request_id}">✕</button>
       </div>`;
         list.appendChild(item);
     });
@@ -904,10 +907,10 @@ function createMsgElement(msg) {
 
     const editBtns = isSelf ? `
     <div class="bubble-actions">
-      <button class="bubble-action-btn" onclick="startEdit(${msg.id})" title="Edit">
+      <button class="bubble-action-btn" data-action="edit" data-msg-id="${msg.id}" title="Edit">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
       </button>
-      <button class="bubble-action-btn del" onclick="deleteMessage(${msg.id})" title="Delete">
+      <button class="bubble-action-btn del" data-action="delete" data-msg-id="${msg.id}" title="Delete">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
       </button>
     </div>` : '';
@@ -999,8 +1002,8 @@ function startEdit(msgId) {
     <div class="edit-inline">
       <input class="input-field" id="edit-input-${msgId}" value="${msg.content}" />
       <div class="edit-inline-actions">
-        <button class="edit-confirm" onclick="confirmEdit(${msgId})" title="Save">✓</button>
-        <button class="edit-cancel"  onclick="renderMessages()"       title="Cancel">✕</button>
+        <button class="edit-confirm" data-action="confirm-edit" data-msg-id="${msgId}" title="Save">✓</button>
+        <button class="edit-cancel"  data-action="cancel-edit"  title="Cancel">✕</button>
       </div>
     </div>`;
 
@@ -1127,7 +1130,7 @@ async function handleModalSearch(val) {
           ${isFriend
                     // Already friends — show a disabled label instead of an Add button.
                     ? `<span class="btn btn-ghost" style="font-size:11px;padding:6px 12px;cursor:default;opacity:.6;">Friends</span>`
-                    : `<button class="btn btn-primary" onclick="sendFriendRequest(${user.id}, this)" style="font-size:12px;padding:6px 14px;">Add</button>`
+                    : `<button class="btn btn-primary" data-action="send-friend-request" data-user-id="${user.id}" style="font-size:12px;padding:6px 14px;">Add</button>`
                 }`;
                 results.appendChild(item);
             });
@@ -1210,12 +1213,122 @@ function closeSidebar() {
 
 
 // =============================================================================
-// EVENT LISTENERS
+// EVENT LISTENERS — wired here instead of inline onclick attributes
+// so the Content-Security-Policy (script-src 'self') is not violated.
 // =============================================================================
-// Tapping the dim overlay behind the sidebar closes it (mobile UX pattern).
-document.getElementById('sidebar-overlay').addEventListener('click', closeSidebar);
+document.addEventListener('DOMContentLoaded', () => {
 
-// Clicking outside the modal card (directly on the backdrop) closes the modal.
-document.getElementById('add-friend-modal').addEventListener('click', function (e) {
-    if (e.target === this) closeAddFriendModal();
+    // ── Sidebar overlay (mobile) ──────────────────────────────────────────
+    document.getElementById('sidebar-overlay').addEventListener('click', closeSidebar);
+
+    // ── Add-friend modal backdrop click ──────────────────────────────────
+    document.getElementById('add-friend-modal').addEventListener('click', function (e) {
+        if (e.target === this) closeAddFriendModal();
+    });
+
+    // ── Auth: welcome → login / register ─────────────────────────────────
+    document.getElementById('btn-show-login').addEventListener('click', () => showView('login'));
+    document.getElementById('btn-show-register').addEventListener('click', () => showView('register'));
+
+    // ── Auth: back links ─────────────────────────────────────────────────
+    document.getElementById('login-back').addEventListener('click', (e) => {
+        e.preventDefault(); showView('welcome');
+    });
+    document.getElementById('register-back').addEventListener('click', (e) => {
+        e.preventDefault(); showView('welcome');
+    });
+
+    // ── Auth: cross-links between login and register ──────────────────────
+    document.getElementById('login-to-register').addEventListener('click', (e) => {
+        e.preventDefault(); showView('register');
+    });
+    document.getElementById('register-to-login').addEventListener('click', (e) => {
+        e.preventDefault(); showView('login');
+    });
+
+    // ── Auth: form submissions ────────────────────────────────────────────
+    document.getElementById('login-form').addEventListener('submit', handleLogin);
+    document.getElementById('register-form').addEventListener('submit', handleRegister);
+
+    // ── Nav rail ─────────────────────────────────────────────────────────
+    document.getElementById('nav-add-friend-btn').addEventListener('click', openAddFriendModal);
+    document.getElementById('nav-logout-btn').addEventListener('click', handleLogout);
+
+    // ── Sidebar tabs ─────────────────────────────────────────────────────
+    document.getElementById('tab-friends').addEventListener('click', () => switchTab('friends'));
+    document.getElementById('tab-requests').addEventListener('click', () => switchTab('requests'));
+
+    // ── Sidebar contact search ────────────────────────────────────────────
+    document.getElementById('contact-search').addEventListener('input', (e) => {
+        handleContactSearch(e.target.value);
+    });
+
+    // ── Mobile header buttons ─────────────────────────────────────────────
+    document.getElementById('mobile-menu-btn').addEventListener('click', toggleSidebar);
+    document.getElementById('mobile-add-btn').addEventListener('click', openAddFriendModal);
+
+    // ── Chat empty state ──────────────────────────────────────────────────
+    document.getElementById('chat-empty-add-btn').addEventListener('click', openAddFriendModal);
+
+    // ── Chat header: info panel toggle ───────────────────────────────────
+    document.getElementById('info-toggle-btn').addEventListener('click', toggleInfoPanel);
+
+    // ── Info panel actions ────────────────────────────────────────────────
+    document.getElementById('block-btn').addEventListener('click', handleBlock);
+    document.getElementById('info-panel-close-btn').addEventListener('click', toggleInfoPanel);
+
+    // ── Chat input ────────────────────────────────────────────────────────
+    const chatInput = document.getElementById('chat-input');
+    chatInput.addEventListener('input', (e) => autoResizeInput(e.target));
+    chatInput.addEventListener('keydown', handleInputKeydown);
+
+    // ── Send button ───────────────────────────────────────────────────────
+    document.getElementById('send-btn').addEventListener('click', sendMessage);
+
+    // ── Modal close button ────────────────────────────────────────────────
+    document.getElementById('modal-close-btn').addEventListener('click', closeAddFriendModal);
+
+    // ── Modal search input ────────────────────────────────────────────────
+    document.getElementById('modal-search-input').addEventListener('input', (e) => {
+        handleModalSearch(e.target.value);
+    });
+});
+
+// =============================================================================
+// EVENT DELEGATION — handles clicks on dynamically-created elements
+// (message bubbles, request cards, modal results) without inline onclick.
+// =============================================================================
+
+// Messages container: edit / delete bubble buttons and inline edit confirm/cancel
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const action  = btn.dataset.action;
+    const msgId   = btn.dataset.msgId ? Number(btn.dataset.msgId) : null;
+    const userId  = btn.dataset.userId ? Number(btn.dataset.userId) : null;
+    const reqId   = btn.dataset.requestId ? Number(btn.dataset.requestId) : null;
+
+    switch (action) {
+        case 'edit':
+            startEdit(msgId);
+            break;
+        case 'delete':
+            deleteMessage(msgId);
+            break;
+        case 'confirm-edit':
+            confirmEdit(msgId);
+            break;
+        case 'cancel-edit':
+            renderMessages();
+            break;
+        case 'accept':
+            respondToRequest(reqId, 'accept');
+            break;
+        case 'decline':
+            respondToRequest(reqId, 'decline');
+            break;
+        case 'send-friend-request':
+            sendFriendRequest(userId, btn);
+            break;
+    }
 });
