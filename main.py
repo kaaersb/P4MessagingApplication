@@ -85,22 +85,21 @@ class RateLimiter:
 rate_limiter = RateLimiter()
 
 
-class RateLimitMiddleware(BaseHTTPMiddleware):
+def check_rate_limit(request: Request, max_requests: int, window_seconds: int):
     """
-    Reject clients that exceed 60 requests / 60 s.
-    Stricter limits are applied per-endpoint for auth routes (see below).
+    Per-endpoint rate limiter. Uses a compound key of IP + limit params so
+    each endpoint has its own independent bucket.
+    Call this at the top of any endpoint that needs protecting.
+    Polling/read endpoints are intentionally left unrestricted — they are
+    authenticated and cheap, so a global cap would only hurt active users.
     """
-    async def dispatch(self, request: Request, call_next):
-        client_ip = request.client.host if request.client else "unknown"
-        if not rate_limiter.is_allowed(client_ip, max_requests=60, window_seconds=60):
-            return Response(
-                content=json.dumps({"detail": "Too many requests. Please slow down."}),
-                status_code=429,
-                media_type="application/json",
-            )
-        return await call_next(request)
-
-app.add_middleware(RateLimitMiddleware)
+    client_ip = request.client.host if request.client else "unknown"
+    key = f"{client_ip}:{max_requests}:{window_seconds}"
+    if not rate_limiter.is_allowed(key, max_requests, window_seconds):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests. Please slow down.",
+        )
 
 
 # ============================================================
@@ -264,16 +263,7 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
-# Per-IP auth rate limiter: max 10 login/register attempts per 10 minutes
-auth_rate_limiter = RateLimiter()
 
-def check_auth_rate_limit(request: Request):
-    ip = request.client.host if request.client else "unknown"
-    if not auth_rate_limiter.is_allowed(ip, max_requests=10, window_seconds=600):
-        raise HTTPException(
-            status_code=429,
-            detail="Too many authentication attempts. Please wait before trying again."
-        )
 
 
 # ============================================================
@@ -350,7 +340,8 @@ def register(data: RegisterRequest, request: Request):
     Password Cracking: password stored as bcrypt hash.
     Resource Exhaustion: auth rate limit applied.
     """
-    check_auth_rate_limit(request)
+    # 5 registration attempts per minute per IP — spam account protection
+    check_rate_limit(request, max_requests=5, window_seconds=60)
 
     conn = get_db()
     cursor = conn.cursor()
@@ -384,7 +375,8 @@ def login(data: LoginRequest, request: Request):
     Password Cracking: compares against bcrypt hash, not plaintext.
     Resource Exhaustion: strict auth rate limit.
     """
-    check_auth_rate_limit(request)
+    # 10 login attempts per minute per IP — brute force / credential stuffing protection
+    check_rate_limit(request, max_requests=10, window_seconds=60)
 
     conn = get_db()
     cursor = conn.cursor()
@@ -466,12 +458,15 @@ def get_users(session: dict = Depends(require_session)):
 
 
 @app.get("/users/search")
-def search_users(query: str, session: dict = Depends(require_session)):
+def search_users(query: str, request: Request, session: dict = Depends(require_session)):
     """
     Search for users by username (partial match).
     Database Dumping (SQLi): parameterised ILIKE with %s placeholder;
           user input is never interpolated into the SQL string.
+    Resource Exhaustion: moderate rate limit to prevent scraping.
     """
+    # 30 searches per minute per IP — scraping / enumeration protection
+    check_rate_limit(request, max_requests=30, window_seconds=60)
     conn = get_db()
     cursor = conn.cursor()
     try:
@@ -507,8 +502,6 @@ def get_user(user_id: int, session: dict = Depends(require_session)):
 # ===== MESSAGE ENDPOINTS ====================================
 # ============================================================
 
-#  per-IP rate limit for the send-message endpoint
-message_rate_limiter = RateLimiter()
 
 @app.post("/send-message")
 async def send_message(data: MessageRequest, request: Request, session: dict = Depends(require_session)):
@@ -517,11 +510,10 @@ async def send_message(data: MessageRequest, request: Request, session: dict = D
     IDOR: sender_id comes from the validated session, not the request body.
     XSS: message content is HTML-escaped before being stored/broadcast.
     Impersonation: sender identity is taken from the server-side session.
-    Resource Exhaustion: strict per-IP rate limit (30 msg / 60 s).
+    Resource Exhaustion: per-IP rate limit (60 msg / 60 s).
     """
-    ip = request.client.host if request.client else "unknown"
-    if not message_rate_limiter.is_allowed(ip, max_requests=30, window_seconds=60):
-        raise HTTPException(status_code=429, detail="You are sending messages too quickly.")
+    # 60 messages per minute — generous for active users, still caps spam/DoS
+    check_rate_limit(request, max_requests=60, window_seconds=60)
 
     # ignore any sender_id the client might have sent; use the session
     sender_id = session["user_id"]
