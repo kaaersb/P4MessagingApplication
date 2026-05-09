@@ -32,7 +32,7 @@ app = FastAPI()
 # is encrypted in transit.
 
 app.add_middleware(HTTPSRedirectMiddleware)
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=["yourdomain.com"])
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["p4app.duckdns.org"])
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
