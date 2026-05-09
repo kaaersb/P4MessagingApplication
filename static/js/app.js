@@ -35,7 +35,13 @@ const api = {
             body: JSON.stringify(body),
         });
         const data = await r.json();
-        if (!r.ok) throw new Error(data.detail || 'Request failed');
+        if (!r.ok) {
+            const detail = data.detail;
+            if (Array.isArray(detail)) {
+                throw new Error(detail.map(e => e.msg).join(', '));
+            }
+            throw new Error(detail || 'Request failed');
+            }
         return data;
     },
     async get(url) {
@@ -180,8 +186,10 @@ async function handleRegister(e) {
         showView('login');
         document.getElementById('lg-username').value = username;
     } catch (err) {
-        showFieldError('rg-username-group', 'rg-username-error', err.message);
-    } finally {
+        // FastAPI 422 errors have a nested structure
+        const msg = err.message || 'Registration failed';
+        showFieldError('rg-username-group', 'rg-username-error', msg);
+    } finally {x$
         setLoading('register', false);
     }
 }
