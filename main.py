@@ -242,10 +242,14 @@ class BlockRequest(BaseModel):
 # ===== HELPERS ==============================================
 # ============================================================
 
+# ============================================================
+# ===== HELPERS ==============================================
+# ============================================================
+
 def sanitize_output(text: str) -> str:
     """
     XSS: HTML-escape any user-supplied text before it is embedded
-    in JSON that the frontend renders into the DOM.  This is a belt-and-
+    in JSON that the frontend renders into the DOM. This is a belt-and-
     suspenders measure; the frontend should also use textContent rather
     than innerHTML when displaying message bodies.
     """
@@ -259,8 +263,23 @@ def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
 
 
+# Valid bcrypt hash used when a username does not exist.
+# This allows login to still perform a bcrypt check, reducing username
+# enumeration through timing differences, without causing HTTP 500 errors.
+DUMMY_PASSWORD_HASH = hash_password("dummy_password_for_timing_protection")
+
+
 def verify_password(plain: str, hashed: str) -> bool:
-    return bcrypt.checkpw(plain.encode(), hashed.encode())
+    """
+    Verify a plaintext password against a bcrypt hash.
+
+    The try/except ensures malformed or legacy password values do not crash
+    the login endpoint. Instead, invalid hashes are treated as failed logins.
+    """
+    try:
+        return bcrypt.checkpw(plain.encode(), hashed.encode())
+    except (ValueError, TypeError):
+        return False
 
 
 
@@ -369,6 +388,7 @@ def register(data: RegisterRequest, request: Request):
 def login(data: LoginRequest, request: Request):
     """
     Authenticate a user and issue a session cookie.
+
     Login Bypass (SQLi): parameterised query + bcrypt verification.
     Credential Sniffing: HTTPS middleware encrypts the channel.
     Session Hijacking: issues a cryptographically random token.
@@ -380,24 +400,27 @@ def login(data: LoginRequest, request: Request):
 
     conn = get_db()
     cursor = conn.cursor()
+
     try:
-        # parameterised query — user input never touches the SQL string
+        # Parameterised query: user input never touches the SQL string.
         cursor.execute(
             "SELECT id, username, password FROM users WHERE username = %s",
             (data.username,)
         )
         user = cursor.fetchone()
 
-        # constant-time bcrypt comparison; always run verify even on miss
-        # (avoids timing-based username enumeration)
-        dummy_hash = "$2b$12$invalidhashfortimingnoreasoning"
-        stored_hash = user[2] if user else dummy_hash
+        # Always perform a bcrypt comparison, even if the username does not exist.
+        # This helps reduce timing differences between existing and non-existing users.
+        stored_hash = user[2] if user else DUMMY_PASSWORD_HASH
         password_ok = verify_password(data.password, stored_hash)
 
         if not user or not password_ok:
-            raise HTTPException(status_code=401, detail="Invalid username or password")
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid username or password"
+            )
 
-        # create a server-side session with a random 256-bit token
+        # Create a server-side session with a random 256-bit token.
         token = create_session(user[0], user[1])
 
         response = {
@@ -405,12 +428,13 @@ def login(data: LoginRequest, request: Request):
             "user_id": user[0],
             "username": user[1],
         }
+
         from fastapi.responses import JSONResponse
         resp = JSONResponse(content=response)
 
-        # HttpOnly prevents JS from reading the cookie;
-        # Secure ensures it is only sent over HTTPS;
-        # SameSite=Strict blocks CSRF.
+        # HttpOnly prevents JavaScript from reading the cookie.
+        # Secure ensures it is only sent over HTTPS.
+        # SameSite=Strict reduces CSRF risk.
         resp.set_cookie(
             key="session_token",
             value=token,
@@ -419,7 +443,18 @@ def login(data: LoginRequest, request: Request):
             samesite="strict",
             max_age=SESSION_TTL,
         )
+
         return resp
+
+    except HTTPException:
+        raise
+
+    except Exception:
+        # Do not expose internal database or bcrypt errors to the client.
+        raise HTTPException(
+            status_code=500,
+            detail="Internal authentication error"
+        )
 
     finally:
         cursor.close()
