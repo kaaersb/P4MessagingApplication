@@ -116,7 +116,10 @@ app.mount("/js",     StaticFiles(directory="static/js"),     name="js")
 
 def get_db():
     conn = psycopg2.connect(os.getenv("DATABASE_URL"))
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 # ============================================================
