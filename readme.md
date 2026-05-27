@@ -1,7 +1,5 @@
 # P4 Messaging Application
 
-# P4 Messaging Application
-
 A private messaging network built with FastAPI and PostgreSQL. Users can register, discover other users, manage a friends list through a request system, and exchange real-time direct messages.
 
 ## Features
