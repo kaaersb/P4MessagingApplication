@@ -536,19 +536,16 @@ async function silentPollMessages() {
 
 /**
  * Keep the sidebar and active conversation in sync even if the WebSocket
- * drops momentarily. Message thread is polled every 3 s; sidebar every 30 s.
+ * drops momentarily. Everything is polled on the same 3 s cadence as
+ * messages so friend requests and acceptances refresh just as promptly.
  */
 function startFallbackPoll() {
     stopFallbackPoll();
-    let tick = 0;
     state.fallbackPollInterval = setInterval(async () => {
         if (!state.currentUser) return;
-        tick++;
         await silentPollMessages();
-        if (tick % 10 === 0) {
-            await loadFriends(true);
-            await loadPendingRequests(true);
-        }
+        await loadFriends(true);
+        await loadPendingRequests(true);
     }, 3000);
 }
 
